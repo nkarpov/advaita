@@ -315,17 +315,17 @@ Do **not** block V2 on public package publishing.
 
 ## Phase 3 — Build the new shared package layer in Advaita V2
 
-- [ ] Implement `packages/shared` for protocol/types/routing helpers
-- [ ] Move runtime routing parser into V2 shared package
-- [ ] Move model-query parsing into V2 shared package
-- [ ] Define the smallest possible broker protocol for:
+- [x] Implement `packages/shared` for protocol/types/routing helpers
+- [x] Move runtime routing parser into V2 shared package
+- [x] Move model-query parsing into V2 shared package
+- [x] Define the smallest possible broker protocol for:
   - hello/runtime presence
   - submit raw shared turn
   - assignment
   - streamed external events as the primary live propagation path
   - committed entry append after canonical turn commit
   - reconnect/bootstrap snapshot only for late join/recovery
-- [ ] Explicitly model runtime-local sticky model state in shared types
+- [x] Explicitly model runtime-local sticky model state in shared types
 
 ## Phase 4 — Rebuild the broker as a thin canonical authority
 
