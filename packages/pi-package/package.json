@@ -2,5 +2,34 @@
   "name": "@advaita/pi-package",
   "private": true,
   "version": "0.0.0",
-  "description": "Advaita Pi package/extension"
+  "description": "Advaita Pi package/extension",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run test"
+  },
+  "dependencies": {
+    "@advaita/shared": "file:../shared",
+    "@mariozechner/pi-coding-agent": "file:../../../pi-mono/packages/coding-agent",
+    "ws": "^8.18.0"
+  }
 }

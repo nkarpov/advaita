@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "description": "Thin canonical broker/router for Advaita V2",
   "type": "module",
+  "bin": {
+    "advaita-broker": "./dist/cli.js"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -17,6 +20,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli.js",
     "test": "vitest run test"
   },
   "dependencies": {

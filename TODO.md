@@ -347,28 +347,28 @@ Do **not** block V2 on public package publishing.
 
 ## Phase 5 — Build the Advaita Pi package/extension as the main client layer
 
-- [ ] Create `packages/pi-package` as the real local client behavior package
-- [ ] Open broker connection on `session_start`
-- [ ] Use Pi `input` hook to intercept shared-turn submission
-- [ ] Leave local Pi commands alone unless explicitly classified as shared
-- [ ] Register Advaita commands such as:
+- [x] Create `packages/pi-package` as the real local client behavior package
+- [x] Open broker connection on `session_start`
+- [x] Use Pi `input` hook to intercept shared-turn submission
+- [x] Leave local Pi commands alone unless explicitly classified as shared
+- [x] Register Advaita commands such as:
   - `/runtime`
   - `/advaita-debug`
   - `/route-debug`
   - maybe `/advaita-status`
-- [ ] Use footer/widget APIs for presence/routing/debug info
-- [ ] Send typing/presence state to the broker
-- [ ] Send local model state changes to broker via `model_select`
-- [ ] On assigned turn:
+- [x] Use footer/widget APIs for presence/routing/debug info
+- [x] Send typing/presence state to the broker
+- [x] Send local model state changes to broker via `model_select`
+- [x] On assigned turn:
   - ensure local session is synced
   - switch local model if requested
   - execute the turn locally with real Pi
   - stream in-flight Pi events to the broker as they occur
   - diff appended committed entries after completion
   - send committed entries back to broker for canonical append
-- [ ] On broker commit for foreign turns:
+- [x] On broker commit for foreign turns:
   - import committed entries into the local Pi session replica
-- [ ] On broker live stream for foreign turns:
+- [x] On broker live stream for foreign turns:
   - render external events progressively through stock Pi UI using fork APIs
   - make the foreign turn appear as ordinary live local assistant/tool activity, not a post-hoc snapshot replacement
 

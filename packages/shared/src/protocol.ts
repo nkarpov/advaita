@@ -140,6 +140,11 @@ export const clientTypingSchema = z.object({
   typing: z.boolean(),
 });
 
+export const clientSwitchRuntimeSchema = z.object({
+  type: z.literal("client.switch_runtime"),
+  runtimeId: z.string().min(1),
+});
+
 export const clientRuntimeModelStateSchema = z.object({
   type: z.literal("client.runtime.model_state"),
   modelState: runtimeModelStateSchema,
@@ -165,6 +170,7 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   clientHelloSchema,
   clientSubmitSchema,
   clientTypingSchema,
+  clientSwitchRuntimeSchema,
   clientRuntimeModelStateSchema,
   clientTurnStreamSchema,
   clientTurnCommitSchema,

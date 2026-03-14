@@ -63,6 +63,16 @@ describe("protocol envelopes", () => {
     expect(parsed).toEqual(message);
   });
 
+  it("serializes and parses explicit runtime switch requests", () => {
+    const message: ClientMessage = {
+      type: "client.switch_runtime",
+      runtimeId: "linux",
+    };
+
+    const parsed = parseClientMessage(serializeProtocolMessage(message).trim());
+    expect(parsed).toEqual(message);
+  });
+
   it("serializes and parses broker snapshots", () => {
     const message: BrokerMessage = {
       type: "broker.snapshot",
