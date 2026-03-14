@@ -1,0 +1,6 @@
+{
+  "name": "@advaita/shared",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Shared protocol, routing, and types for Advaita V2"
+}
