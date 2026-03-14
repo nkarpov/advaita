@@ -329,21 +329,21 @@ Do **not** block V2 on public package publishing.
 
 ## Phase 4 — Rebuild the broker as a thin canonical authority
 
-- [ ] Implement a new thin broker package instead of piling more onto the legacy broker
-- [ ] Keep the broker authoritative for ordering, queueing, routing, and fanout only
-- [ ] Make live turn fanout incremental/event-stream-based, not snapshot-based
-- [ ] Remove any broker ownership of local auth semantics
-- [ ] Remove any broker assumption of one global sticky model for the whole session
-- [ ] Track per-runtime connected state:
+- [x] Implement a new thin broker package instead of piling more onto the legacy broker
+- [x] Keep the broker authoritative for ordering, queueing, routing, and fanout only
+- [x] Make live turn fanout incremental/event-stream-based, not snapshot-based
+- [x] Remove any broker ownership of local auth semantics
+- [x] Remove any broker assumption of one global sticky model for the whole session
+- [x] Track per-runtime connected state:
   - runtime id
   - client id
   - cwd
   - local current model
   - available models
   - presence/typing/executing
-- [ ] Route runtime + optional requested model in the same decision pass
-- [ ] Requeue if assigned runtime disconnects mid-turn
-- [ ] Support reconnect snapshot sync for late joiners/new replicas
+- [x] Route runtime + optional requested model in the same decision pass
+- [x] Requeue if assigned runtime disconnects mid-turn
+- [x] Support reconnect snapshot sync for late joiners/new replicas
 
 ## Phase 5 — Build the Advaita Pi package/extension as the main client layer
 

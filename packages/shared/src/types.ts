@@ -80,6 +80,19 @@ export interface StreamedTurnEvent {
   event: AgentSessionEvent;
 }
 
+export interface AdvaitaTurnEntryData {
+  turnId: string;
+  originClientId: string;
+  originRuntimeId: string;
+  originCwd: string;
+  requestedRuntimeId: string | null;
+  requestedModelQuery: string | null;
+  executionRuntimeId: string;
+  executionClientId: string;
+  executionCwd: string;
+  queuedAt: string;
+}
+
 export interface TurnCommit {
   turnId: string;
   executionRuntimeId: string;

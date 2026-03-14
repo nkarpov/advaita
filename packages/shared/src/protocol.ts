@@ -191,6 +191,12 @@ export const brokerPresenceSchema = z.object({
   activeTurnId: z.string().nullable(),
 });
 
+export const brokerSessionEntriesSchema = z.object({
+  type: z.literal("broker.session.entries"),
+  entries: z.array(sessionEntrySchema),
+  metadata: sessionMetadataSchema,
+});
+
 export const brokerSessionCommitSchema = z.object({
   type: z.literal("broker.session.commit"),
   commit: turnCommitSchema,
@@ -226,6 +232,7 @@ export const brokerNoticeSchema = z.object({
 export const brokerMessageSchema = z.discriminatedUnion("type", [
   brokerSnapshotSchema,
   brokerPresenceSchema,
+  brokerSessionEntriesSchema,
   brokerSessionCommitSchema,
   brokerTurnAssignedSchema,
   brokerTurnStreamSchema,

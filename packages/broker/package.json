@@ -2,5 +2,26 @@
   "name": "@advaita/broker",
   "private": true,
   "version": "0.0.0",
-  "description": "Thin canonical broker/router for Advaita V2"
+  "description": "Thin canonical broker/router for Advaita V2",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run test"
+  },
+  "dependencies": {
+    "@advaita/shared": "file:../shared",
+    "@mariozechner/pi-coding-agent": "file:../../../pi-mono/packages/coding-agent",
+    "ws": "^8.18.0"
+  }
 }

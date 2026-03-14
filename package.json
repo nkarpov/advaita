@@ -7,12 +7,13 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run --workspaces build --if-present",
-    "test": "npm run --workspaces test --if-present",
+    "build": "npm --workspace @advaita/shared run build && npm --workspace @advaita/broker run build && npm --workspace @advaita/pi-package run build --if-present && npm --workspace @advaita/launcher run build --if-present && npm --workspace @advaita/integration-tests run build --if-present",
+    "test": "npm --workspace @advaita/shared run build && npm --workspace @advaita/shared run test && npm --workspace @advaita/broker run test && npm --workspace @advaita/pi-package run test --if-present && npm --workspace @advaita/launcher run test --if-present && npm --workspace @advaita/integration-tests run test --if-present",
     "clean": "find packages -type d -name dist -prune -exec rm -rf {} + ; find packages -type d -name coverage -prune -exec rm -rf {} +"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }

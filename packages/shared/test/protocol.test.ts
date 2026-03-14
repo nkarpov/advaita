@@ -91,6 +91,17 @@ describe("protocol envelopes", () => {
     expect(parsed).toEqual(message);
   });
 
+  it("serializes generic session entry appends for pre-turn user commits", () => {
+    const message: BrokerMessage = {
+      type: "broker.session.entries",
+      entries: sessionSnapshot.entries,
+      metadata: sessionSnapshot.metadata,
+    };
+
+    const parsed = parseBrokerMessage(serializeProtocolMessage(message).trim());
+    expect(parsed).toEqual(message);
+  });
+
   it("carries live streamed turn events as the primary mirror path", () => {
     const message: BrokerMessage = {
       type: "broker.turn.stream",
