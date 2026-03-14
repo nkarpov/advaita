@@ -63,6 +63,26 @@ class AdvaitaExtensionController {
     this.registerEvents();
   }
 
+  private hasRequiredPiApis(): boolean {
+    const api = this.pi as Partial<ExtensionAPI>;
+    return (
+      typeof api.replaceSessionContents === "function" &&
+      typeof api.importSessionEntries === "function" &&
+      typeof api.continueSession === "function"
+    );
+  }
+
+  private ensureSupportedPiRuntime(ctx?: ExtensionContext): boolean {
+    if (this.hasRequiredPiApis()) {
+      return true;
+    }
+    ctx?.ui.notify(
+      "Advaita requires the forked Pi runtime. This `pi` binary is missing replaceSessionContents/importSessionEntries/continueSession. Run /Users/nickkarpov/pi-mono/packages/coding-agent/dist/cli.js or npm link the forked pi-mono packages/coding-agent package.",
+      "error",
+    );
+    return false;
+  }
+
   private registerFlags(): void {
     this.pi.registerFlag("advaita-url", { description: "Advaita broker websocket URL", type: "string" });
     this.pi.registerFlag("advaita-session", { description: "Advaita shared session name", type: "string" });
@@ -88,6 +108,9 @@ class AdvaitaExtensionController {
           displayName: this.defaultDisplayName(),
           clientId: this.resolveClientId(),
         };
+        if (!this.ensureSupportedPiRuntime(ctx)) {
+          return;
+        }
         await this.connect(ctx, config);
         ctx.ui.notify(`Connected to Advaita session ${sessionName}`, "info");
       },
@@ -178,6 +201,9 @@ class AdvaitaExtensionController {
       this.updateFooterStatus();
       const config = this.resolveConfigFromFlags();
       if (config) {
+        if (!this.ensureSupportedPiRuntime(ctx)) {
+          return;
+        }
         await this.connect(ctx, config);
       }
     });

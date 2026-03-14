@@ -30,15 +30,18 @@ npm --workspace @advaita/broker run build
 npm --workspace @advaita/broker run start -- --host 127.0.0.1 --port 7171 --data-dir /tmp/advaita-broker
 ```
 
-Then launch Pi with the package:
+Then launch the **forked Pi runtime** with the package:
 
 ```bash
-pi \
+cd /Users/nickkarpov/pi-mono
+node packages/coding-agent/dist/cli.js \
   -e /Users/nickkarpov/advaita/packages/pi-package \
   --advaita-url ws://127.0.0.1:7171 \
   --advaita-session demo \
   --advaita-runtime mac
 ```
+
+Do **not** use an older globally installed `pi` binary here. Advaita Phase 5 depends on fork-only extension APIs such as `replaceSessionContents()`, `importSessionEntries()`, and `continueSession()`.
 
 ## Current limitations
 
