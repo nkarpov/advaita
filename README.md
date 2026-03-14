@@ -79,6 +79,7 @@ The main user experience goal is:
 │  └─ integration-tests/
 └─ notes/
    ├─ command-classification.md
+   ├─ local-dev-workflow.md
    ├─ migration-plan.md
    └─ pi-fork-api-gap.md
 ```
@@ -119,12 +120,20 @@ Pi development for Advaita happens against:
 
 - `/Users/nickkarpov/pi-mono`
 
+Advaita's Pi dependency source is **our fork**.
+
+That means any `@mariozechner/pi-*` package used by Advaita should come from our forked checkout/release line, not upstream.
+
 Remote policy:
 
 - `origin` = our fork
 - `upstream` = real Pi repo
 - do not open PRs to upstream from this workstream
 
-## Next step after Phase 0
+See:
 
-Phase 1 wires Advaita against the existing Pi fork and validates the local fork-based development loop.
+- `notes/local-dev-workflow.md`
+
+## Next step after Phase 1
+
+Phase 2 adds the generic session import/rendering seams to our Pi fork.
