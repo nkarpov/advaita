@@ -136,8 +136,8 @@ See:
 
 ## Current phase checkpoint
 
-Phase 2 is complete in our Pi fork: the fork now has generic session replacement/import APIs, extension-facing wrappers, and UI hooks for live external event rendering plus transcript rebuilds.
+Phase 3 is complete in Advaita: `packages/shared` now holds the shared protocol, runtime/model routing parsers, and typed broker/client contracts built around our forked Pi session and event seams.
 
-## Next step after Phase 2
+## Next step after Phase 3
 
-Phase 3 builds the shared Advaita package layer on top of those new fork seams.
+Phase 4 rebuilds the broker as a thin canonical authority on top of the new shared package layer.
