@@ -1,0 +1,14 @@
+{
+  "name": "advaita",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Advaita V2 workspace",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run --workspaces build --if-present",
+    "test": "npm run --workspaces test --if-present",
+    "clean": "find packages -type d -name dist -prune -exec rm -rf {} + ; find packages -type d -name coverage -prune -exec rm -rf {} +"
+  }
+}

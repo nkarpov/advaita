@@ -1,0 +1,6 @@
+{
+  "name": "@advaita/broker",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Thin canonical broker/router for Advaita V2"
+}

@@ -1,0 +1,6 @@
+{
+  "name": "@advaita/pi-package",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Advaita Pi package/extension"
+}

@@ -1,0 +1,6 @@
+{
+  "name": "@advaita/integration-tests",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Integration and multi-runtime tests for Advaita V2"
+}

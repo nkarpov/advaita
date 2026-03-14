@@ -1,0 +1,6 @@
+{
+  "name": "@advaita/launcher",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Launcher/bootstrap surface for Advaita V2"
+}
