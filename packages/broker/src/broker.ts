@@ -185,6 +185,10 @@ export class AdvaitaBroker {
         this.broadcastPresence(connection.sessionName);
         break;
       }
+      case "client.switch_runtime": {
+        this.handleRuntimeSwitch(connection.sessionName, client, message.runtimeId);
+        break;
+      }
       case "client.runtime.model_state": {
         client.modelState = structuredClone(message.modelState);
         this.broadcastPresence(connection.sessionName);
@@ -357,6 +361,27 @@ export class AdvaitaBroker {
     this.send(executor, {
       type: "broker.turn.assigned",
       assignment,
+    });
+  }
+
+  private handleRuntimeSwitch(sessionName: string, _client: ConnectedClient, runtimeId: string): void {
+    const state = this.getSessionState(sessionName);
+    const hasRuntime = Array.from(state.clients.values()).some((candidate) => candidate.runtimeId === runtimeId);
+    if (!hasRuntime) {
+      this.broadcast(sessionName, {
+        type: "broker.notice",
+        level: "warning",
+        message: `Runtime ${runtimeId} is not connected.`,
+      });
+      return;
+    }
+
+    this.store.updateMetadata(sessionName, { currentRuntimeId: runtimeId });
+    this.broadcastTurnState(sessionName);
+    this.broadcast(sessionName, {
+      type: "broker.notice",
+      level: "info",
+      message: `Runtime switched to ${runtimeId}`,
     });
   }
 

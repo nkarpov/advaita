@@ -136,8 +136,8 @@ See:
 
 ## Current phase checkpoint
 
-Phase 4 is complete in Advaita: `packages/broker` now provides a thin canonical authority with persistent Pi-shaped session storage, runtime/model-aware turn assignment, live event fanout, commit handling, disconnect requeue/reassignment, and websocket transport.
+Phase 5 is complete in Advaita: `packages/pi-package` now connects real Pi sessions to the broker, intercepts shared submit, keeps local Pi commands local, syncs broker snapshots/commits into Pi, renders foreign live turns through the forked Pi seams, and executes assigned turns locally via real Pi continuation.
 
-## Next step after Phase 4
+## Next step after Phase 5
 
-Phase 5 builds the Advaita Pi package/extension as the main client layer on top of the new shared package and broker.
+Phase 6 deepens command classification and runtime-local controls, plus starts hardening the interactive end-to-end bootstrap flow.

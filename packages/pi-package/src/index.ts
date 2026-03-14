@@ -1,1 +1,2 @@
-// Phase 0 scaffold for @advaita/pi-package
+// Phase 5 implementation lives in advaita-extension.ts
+export { default } from "./advaita-extension.js";

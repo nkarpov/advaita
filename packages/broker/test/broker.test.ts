@@ -249,6 +249,41 @@ describe("AdvaitaBroker", () => {
     expect(finalPresence?.presence.find((item) => item.runtimeId === "linux")?.modelState.currentModel?.modelId).toBe("gpt-5");
   });
 
+  it("updates the shared default runtime when explicitly switched", () => {
+    const broker = new AdvaitaBroker({
+      dataDir: mkdtempSync(join(tmpdir(), "advaita-broker-switch-")),
+      now: () => "2026-03-14T00:00:00.000Z",
+    });
+
+    const mac = connectClient(broker, {
+      type: "client.hello",
+      sessionName: "switch-runtime",
+      clientId: "client-mac",
+      runtimeId: "mac",
+      displayName: "Mac",
+      cwd: "/Users/nickkarpov/advaita",
+      modelState: createModelState({ provider: "openai", modelId: "gpt-4", name: "GPT-4" }),
+    });
+    connectClient(broker, {
+      type: "client.hello",
+      sessionName: "switch-runtime",
+      clientId: "client-linux",
+      runtimeId: "linux",
+      displayName: "Linux",
+      cwd: "/home/nick/advaita",
+      modelState: createModelState({ provider: "openai", modelId: "gpt-4", name: "GPT-4" }),
+    });
+
+    broker.handleClientMessage(mac.connection, {
+      type: "client.switch_runtime",
+      runtimeId: "linux",
+    });
+
+    const turnState = findLastMessage(mac.messages, "broker.turn.state");
+    expect(turnState?.currentRuntimeId).toBe("linux");
+    expect(broker.loadSession("switch-runtime").metadata.currentRuntimeId).toBe("linux");
+  });
+
   it("reassigns an active turn after executor disconnect without duplicating the committed user turn", () => {
     let tick = 0;
     const broker = new AdvaitaBroker({
