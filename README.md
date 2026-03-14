@@ -136,8 +136,8 @@ See:
 
 ## Current phase checkpoint
 
-Phase 3 is complete in Advaita: `packages/shared` now holds the shared protocol, runtime/model routing parsers, and typed broker/client contracts built around our forked Pi session and event seams.
+Phase 4 is complete in Advaita: `packages/broker` now provides a thin canonical authority with persistent Pi-shaped session storage, runtime/model-aware turn assignment, live event fanout, commit handling, disconnect requeue/reassignment, and websocket transport.
 
-## Next step after Phase 3
+## Next step after Phase 4
 
-Phase 4 rebuilds the broker as a thin canonical authority on top of the new shared package layer.
+Phase 5 builds the Advaita Pi package/extension as the main client layer on top of the new shared package and broker.
