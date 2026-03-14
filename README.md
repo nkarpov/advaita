@@ -134,6 +134,10 @@ See:
 
 - `notes/local-dev-workflow.md`
 
-## Next step after Phase 1
+## Current phase checkpoint
 
-Phase 2 adds the generic session import/rendering seams to our Pi fork.
+Phase 2 is complete in our Pi fork: the fork now has generic session replacement/import APIs, extension-facing wrappers, and UI hooks for live external event rendering plus transcript rebuilds.
+
+## Next step after Phase 2
+
+Phase 3 builds the shared Advaita package layer on top of those new fork seams.

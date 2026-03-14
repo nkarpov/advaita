@@ -304,14 +304,14 @@ Do **not** block V2 on public package publishing.
 
 ## Phase 2 — Implement the minimal generic APIs in the Pi fork
 
-- [ ] Add public session replacement/hydration API
-- [ ] Add public imported-entry append API
-- [ ] Ensure imported entries rebuild `SessionManager` + agent context correctly
-- [ ] Ensure imported entries do **not** re-trigger local user input semantics
-- [ ] Add public external-event rendering API for InteractiveMode
-- [ ] Add extension-facing wrappers for the above APIs if needed
-- [ ] Add fork tests covering hydration/import/external-rendering behavior
-- [ ] Keep all fork changes generic and independently reviewable
+- [x] Add public session replacement/hydration API
+- [x] Add public imported-entry append API
+- [x] Ensure imported entries rebuild `SessionManager` + agent context correctly
+- [x] Ensure imported entries do **not** re-trigger local user input semantics
+- [x] Add public external-event rendering API for InteractiveMode
+- [x] Add extension-facing wrappers for the above APIs if needed
+- [x] Add fork tests covering hydration/import/external-rendering behavior
+- [x] Keep all fork changes generic and independently reviewable
 
 ## Phase 3 — Build the new shared package layer in Advaita V2
 
