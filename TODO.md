@@ -294,13 +294,13 @@ Do **not** block V2 on public package publishing.
 
 ## Phase 1 — Wire local development against the existing Pi fork
 
-- [ ] Verify the local fork checkout at `/Users/nickkarpov/pi-mono` is healthy
-- [ ] Verify `origin` points at our fork and `upstream` points at the real Pi repo
-- [ ] Add a documented local-dev workflow for building Advaita against the forked Pi packages from `/Users/nickkarpov/pi-mono`
-- [ ] Verify we can run stock Pi from our fork before any Advaita changes
-- [ ] Create an `advaita/main` branch in the fork for our generic API work
-- [ ] Create `/Users/nickkarpov/advaita/notes/pi-fork-api-gap.md` with the exact abstraction list before coding the fork
-- [ ] Add an explicit note in local docs: never open upstream PRs from this workstream
+- [x] Verify the local fork checkout at `/Users/nickkarpov/pi-mono` is healthy
+- [x] Verify `origin` points at our fork and `upstream` points at the real Pi repo
+- [x] Add a documented local-dev workflow for building Advaita against the forked Pi packages from `/Users/nickkarpov/pi-mono`
+- [x] Verify we can run stock Pi from our fork before any Advaita changes
+- [x] Create an `advaita/main` branch in the fork for our generic API work
+- [x] Create `/Users/nickkarpov/advaita/notes/pi-fork-api-gap.md` with the exact abstraction list before coding the fork
+- [x] Add an explicit note in local docs: never open upstream PRs from this workstream
 
 ## Phase 2 — Implement the minimal generic APIs in the Pi fork
 
