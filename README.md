@@ -11,32 +11,42 @@ Reference-only prototype history lives in:
 
 - `/Users/nickkarpov/ws/advaita`
 
-## Phase 0 status
-
-Phase 0 is complete when this workspace exists as the new source of truth for V2, the old prototype is frozen as a historical reference, and the package/notes layout is ready for implementation.
-
-Current status:
-
-- legacy prototype checkpoint tagged in `/Users/nickkarpov/ws/advaita` as `legacy-prototype`
-- clean V2 workspace created at `/Users/nickkarpov/advaita`
-- package roots created under `packages/`
-- architecture and migration notes created under `README.md` and `notes/`
-
 ## Product direction
+
+Advaita should stop feeling like "Pi + a separate broker + local checkout glue" and start feeling like a real product.
+
+The intended install and launch surface is:
+
+```bash
+npm install -g @nkarpov/advaita
+advaita
+```
+
+That implies a few concrete product rules:
+
+- users should run **`advaita`**, not manually invoke `pi`
+- users should **not** manually start a broker
+- Advaita should own the **exact Pi runtime version** it needs instead of depending on whatever `pi` is in `PATH`
+- the Advaita Pi package should become an **implementation detail**, not the primary user entrypoint
+- the broker should feel **embedded from the user point of view**, even if we manage it as a separate local process for resiliency
+
+## Core architecture direction
 
 Advaita V2 is built around:
 
-- a **thin broker/router**
-- a **real long-lived Pi runtime on each machine**
+- a **real Pi runtime on each machine**
 - an **Advaita Pi package/extension** for multiplayer behavior
-- a **small Advaita-maintained Pi fork** for missing generic APIs
+- a **thin broker/router** today
+- a **managed local Advaita node** next
+- a **small Advaita-maintained Pi fork** for missing generic APIs only
 
-The main user experience goal is:
+The main user experience goal remains:
 
 - each machine feels like **real Pi**
 - local Pi concerns stay local (`/login`, `/logout`, auth, model availability, settings)
-- shared turns are routed by the broker
-- remote execution is rendered **live**, streamed incrementally, and feels like it is happening locally
+- shared turns are routed through Advaita
+- remote execution is rendered **live** and feels local
+- eventually, each Advaita install has local broker/node capability so the system can survive losing any one machine
 
 ## Core runtime model
 
@@ -49,7 +59,7 @@ The main user experience goal is:
 - local session/runtime behavior
 - local theme/extensions/settings
 
-### Advaita broker owns
+### Advaita broker/node owns
 
 - turn routing
 - canonical shared transcript ordering
@@ -57,12 +67,13 @@ The main user experience goal is:
 - presence/typing
 - reconnect/bootstrap snapshots when needed
 - live fanout of in-flight remote Pi events during active turns
+- later: node lifecycle, peer replication, and failover
 
 ### Pi fork owns only generic seams
 
 - session hydration/import APIs
 - external event rendering APIs
-- any other small generic abstractions required to connect real Pi to shared session replication
+- continuation/sync helpers needed to connect real Pi to shared session replication
 
 ## Workspace layout
 
@@ -90,20 +101,69 @@ The main user experience goal is:
 Shared protocol, routing parsers, canonical types, and transport contracts.
 
 ### `packages/broker`
-Thin canonical broker/router for routing, ordering, fanout, reconnect, and presence.
+Thin broker/router implementation used today as the canonical authority and later as the basis for managed local node behavior.
 
 ### `packages/pi-package`
-The main Advaita Pi package/extension that intercepts shared submit, talks to the broker, keeps local runtime state in sync, and renders live remote execution.
+The Advaita Pi package/extension that intercepts shared submit, talks to the broker, keeps local runtime state in sync, and renders live remote execution.
 
 ### `packages/launcher`
-Small local bootstrap/launcher surface for running Advaita in a repeatable way.
+The future **published product surface**: the `advaita` binary, install/bootstrap flow, Pi runtime ownership, and local node/broker lifecycle management.
 
 ### `packages/integration-tests`
 Cross-runtime and cross-machine integration fixtures, replay tests, and multi-client validation.
 
+## Current phase checkpoint
+
+Phase 5 is complete in Advaita:
+
+- `packages/pi-package` now connects real Pi sessions to the broker
+- shared submit interception/import/render/assigned-turn execution exist
+- forked Pi sync/render/continue seams are real
+- the first meaningful interactive path exists
+
+But the current run path is still **developer-assembled**:
+
+- it depends on the forked Pi checkout directly
+- it still exposes the broker as a manual process
+- it still exposes the Pi package as a manual launch detail
+- it can fail if an old global `pi` binary is used accidentally
+
+That is exactly what the next phases are meant to fix.
+
+## Next phases
+
+### Phase 6 — Product launcher & installer
+
+Make Advaita installable and runnable as a single product surface:
+
+- publishable `@nkarpov/advaita`
+- `advaita` command
+- pinned/forked Pi runtime under Advaita control
+- automatic Pi package loading
+- automatic local broker startup/attach
+- `advaita doctor` and bootstrap validation
+
+### Phase 7 — Managed local node
+
+Make the broker feel embedded while improving resilience:
+
+- local managed node/service process
+- TUI attaches to that node
+- node can outlive the foreground TUI
+- no manual broker lifecycle for users
+
+### Phase 8 — Replicated session authority
+
+Evolve from one canonical broker to a replicated multi-node model:
+
+- each Advaita install has node/broker capability
+- canonical session state is replicated
+- leader/authority can move when a machine disappears
+- shutting down any one machine should not kill the session
+
 ## Reference policy
 
-`/Users/nickkarpov/ws/advaita` is now reference-only.
+`/Users/nickkarpov/ws/advaita` is reference-only.
 
 Use it for:
 
@@ -133,11 +193,3 @@ Remote policy:
 See:
 
 - `notes/local-dev-workflow.md`
-
-## Current phase checkpoint
-
-Phase 5 is complete in Advaita: `packages/pi-package` now connects real Pi sessions to the broker, intercepts shared submit, keeps local Pi commands local, syncs broker snapshots/commits into Pi, renders foreign live turns through the forked Pi seams, and executes assigned turns locally via real Pi continuation.
-
-## Next step after Phase 5
-
-Phase 6 deepens command classification and runtime-local controls, plus starts hardening the interactive end-to-end bootstrap flow.
