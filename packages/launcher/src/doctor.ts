@@ -3,8 +3,7 @@ import { constants } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { inspectTurnIntentRouterEnvironment } from "@advaita/broker";
-import { resolveBrokerArtifacts, resolvePiPackageArtifacts, resolvePiRuntimeArtifacts, resolveSharedArtifacts, resolveCurrentPackage, missingPiSyncApis } from "./runtime-resolution.js";
+import { importResolvedPackageModule, resolveBrokerArtifacts, resolvePiPackageArtifacts, resolvePiRuntimeArtifacts, resolveSharedArtifacts, resolveCurrentPackage, missingPiSyncApis } from "./runtime-resolution.js";
 
 export type DoctorStatus = "ok" | "warn" | "error";
 
@@ -18,6 +17,8 @@ export interface DoctorReport {
   checks: DoctorCheck[];
   launcherVersion: string;
 }
+
+type BrokerModule = typeof import("@advaita/broker");
 
 function compareNodeVersion(current: string, minimum: string): boolean {
   const currentParts = current.replace(/^v/, "").split(".").map(Number);
@@ -83,6 +84,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     detail: `Resolved ${broker.packageInfo.packageJson.name}@${broker.packageInfo.packageJson.version} with CLI ${broker.cliPath}`,
   });
 
+  const { inspectTurnIntentRouterEnvironment } = await importResolvedPackageModule<BrokerModule>("@advaita/broker");
   const router = await inspectTurnIntentRouterEnvironment();
   checks.push({
     name: "turn-router",

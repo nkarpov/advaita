@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { BrokerMessage, ClientMessage, RuntimeModelState } from "@advaita/shared";
+import type { BrokerMessage, ClientMessage, RuntimeModelState, TurnRoutingIntent } from "@advaita/shared";
 import { ADVAITA_TURN_CUSTOM_TYPE, isAdvaitaTurnEntry } from "@advaita/shared";
 import type { SessionEntry } from "@mariozechner/pi-coding-agent";
 import { AdvaitaBroker, type BrokerConnection } from "../src/broker.js";
@@ -32,6 +32,10 @@ function connectClient(
 
 function findLastMessage<T extends BrokerMessage["type"]>(messages: BrokerMessage[], type: T): Extract<BrokerMessage, { type: T }> | undefined {
   return [...messages].reverse().find((message): message is Extract<BrokerMessage, { type: T }> => message.type === type);
+}
+
+function findMessages<T extends BrokerMessage["type"]>(messages: BrokerMessage[], type: T): Extract<BrokerMessage, { type: T }>[] {
+  return messages.filter((message): message is Extract<BrokerMessage, { type: T }> => message.type === type);
 }
 
 function assistantEntry(text: string, parentId: string | null): SessionEntry {
@@ -73,7 +77,114 @@ function createBroker(options: ConstructorParameters<typeof AdvaitaBroker>[0]): 
   });
 }
 
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (error?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("AdvaitaBroker", () => {
+  it("appends the raw submitted user turn immediately before routing completes when the session is idle", async () => {
+    const routed = createDeferred<TurnRoutingIntent>();
+    const broker = createBroker({
+      dataDir: mkdtempSync(join(tmpdir(), "advaita-broker-immediate-")),
+      createTurnId: () => "turn-immediate",
+      now: () => "2026-03-14T00:00:00.000Z",
+      turnIntentRouter: {
+        routeTurn: async () => routed.promise,
+      },
+    });
+
+    const mac = connectClient(broker, {
+      type: "client.hello",
+      sessionName: "immediate",
+      clientId: "client-mac",
+      runtimeId: "mac",
+      displayName: "Mac",
+      cwd: "/Users/nickkarpov/advaita",
+      modelState: createModelState({ provider: "openai", modelId: "gpt-4", name: "GPT-4" }),
+    });
+
+    const submitPromise = broker.handleClientMessage(mac.connection, {
+      type: "client.submit",
+      text: "inspect the repo",
+    });
+    await Promise.resolve();
+
+    const initialAppend = findLastMessage(mac.messages, "broker.session.entries");
+    expect(initialAppend?.entries).toHaveLength(2);
+    const rawUserEntry = initialAppend?.entries.find(
+      (entry): entry is Extract<SessionEntry, { type: "message" }> => entry.type === "message" && entry.message.role === "user",
+    );
+    expect(rawUserEntry?.message.content).toBe("inspect the repo");
+    expect(findLastMessage(mac.messages, "broker.turn.assigned")).toBeUndefined();
+    expect(
+      broker.loadSession("immediate").entries.some(
+        (entry) => entry.type === "message" && entry.message.role === "user" && entry.message.content === "inspect the repo",
+      ),
+    ).toBe(true);
+
+    routed.resolve({
+      action: "execute",
+      requestedRuntimeId: null,
+      runtimeScope: "none",
+      requestedModelQuery: null,
+      executionText: "inspect the repo",
+      routingSource: "heuristic",
+    });
+    await submitPromise;
+
+    const assigned = findLastMessage(mac.messages, "broker.turn.assigned");
+    expect(assigned?.assignment.text).toBe("inspect the repo");
+    expect(assigned?.assignment.executionText).toBe("inspect the repo");
+  });
+
+  it("seeds the shared current runtime from the first connected client and broadcasts joins into the session", () => {
+    const broker = createBroker({
+      dataDir: mkdtempSync(join(tmpdir(), "advaita-broker-connect-")),
+      now: () => "2026-03-14T00:00:00.000Z",
+    });
+
+    const mac = connectClient(broker, {
+      type: "client.hello",
+      sessionName: "connect",
+      clientId: "client-mac",
+      runtimeId: "mac",
+      displayName: "Mac",
+      cwd: "/Users/nickkarpov/advaita",
+      modelState: createModelState({ provider: "openai", modelId: "gpt-4", name: "GPT-4" }),
+    });
+
+    expect(findLastMessage(mac.messages, "broker.snapshot")?.session.metadata.currentRuntimeId).toBe("mac");
+    expect(broker.loadSession("connect").metadata.currentRuntimeId).toBe("mac");
+
+    const linux = connectClient(broker, {
+      type: "client.hello",
+      sessionName: "connect",
+      clientId: "client-linux",
+      runtimeId: "linux",
+      displayName: "EVO-X1",
+      cwd: "/home/nick/advaita",
+      modelState: createModelState({ provider: "openai", modelId: "gpt-4", name: "GPT-4" }),
+    });
+
+    expect(findLastMessage(linux.messages, "broker.snapshot")?.session.metadata.currentRuntimeId).toBe("mac");
+    const joinAppend = findLastMessage(mac.messages, "broker.session.entries");
+    expect(
+      joinAppend?.entries.some(
+        (entry) => entry.type === "custom_message" && typeof entry.content === "string" && entry.content.includes("[advaita] EVO-X1 joined on linux"),
+      ),
+    ).toBe(true);
+  });
+
   it("routes explicit runtime requests, streams live events, and commits canonical entries without changing the sticky runtime", async () => {
     const broker = createBroker({
       dataDir: mkdtempSync(join(tmpdir(), "advaita-broker-")),
@@ -112,8 +223,21 @@ describe("AdvaitaBroker", () => {
     expect(assignment?.assignment.runtimeScope).toBe("turn");
     expect(assignment?.assignment.requestedModelQuery).toBe("gpt 5");
 
-    const initialAppend = findLastMessage(linux.messages, "broker.session.entries");
-    expect(initialAppend?.entries).toHaveLength(2);
+    const sessionEntryMessages = findMessages(linux.messages, "broker.session.entries");
+    expect(
+      sessionEntryMessages.some(
+        (message) =>
+          message.entries.length === 2
+          && message.entries.some((entry) => entry.type === "message" && entry.message.role === "user"),
+      ),
+    ).toBe(true);
+    expect(
+      sessionEntryMessages.some((message) =>
+        message.entries.some(
+          (entry) => entry.type === "custom_message" && typeof entry.content === "string" && entry.content.includes("this turn will execute on mac"),
+        ),
+      ),
+    ).toBe(true);
 
     await broker.handleClientMessage(mac.connection, {
       type: "client.turn.stream",
@@ -181,10 +305,15 @@ describe("AdvaitaBroker", () => {
     const committed = findLastMessage(linux.messages, "broker.session.commit");
     expect(committed?.commit.turnId).toBe("turn-1");
     expect(committed?.commit.executionRuntimeId).toBe("mac");
-    expect(committed?.metadata.currentRuntimeId).toBeNull();
+    expect(committed?.metadata.currentRuntimeId).toBe("mac");
+    expect(
+      committed?.commit.entries.some(
+        (entry) => entry.type === "custom_message" && typeof entry.content === "string" && entry.content.includes("mac model set to GPT-5"),
+      ),
+    ).toBe(true);
 
     const stored = broker.loadSession("demo");
-    expect(stored.metadata.currentRuntimeId).toBeNull();
+    expect(stored.metadata.currentRuntimeId).toBe("mac");
     expect(stored.entries.some((entry) => isAdvaitaTurnEntry(entry) && entry.customType === ADVAITA_TURN_CUSTOM_TYPE)).toBe(true);
     expect(stored.entries.some((entry) => entry.type === "message" && entry.message.role === "assistant")).toBe(true);
   });
@@ -224,6 +353,12 @@ describe("AdvaitaBroker", () => {
     expect(assignment?.assignment.executionRuntimeId).toBe("linux");
     expect(assignment?.assignment.requestedModelQuery).toBe("gpt 5");
     expect(assignment?.assignment.runtimeScope).toBe("turn");
+    const routeAppend = findLastMessage(mac.messages, "broker.session.entries");
+    expect(
+      routeAppend?.entries.some(
+        (entry) => entry.type === "custom_message" && typeof entry.content === "string" && entry.content.includes("requested model: gpt 5"),
+      ),
+    ).toBe(true);
 
     await broker.handleClientMessage(linux.connection, {
       type: "client.runtime.model_state",
@@ -292,6 +427,12 @@ describe("AdvaitaBroker", () => {
     const turnState = findLastMessage(mac.messages, "broker.turn.state");
     expect(turnState?.currentRuntimeId).toBe("linux");
     expect(broker.loadSession("switch-runtime").metadata.currentRuntimeId).toBe("linux");
+    const switchAppend = findLastMessage(mac.messages, "broker.session.entries");
+    expect(
+      switchAppend?.entries.some(
+        (entry) => entry.type === "custom_message" && typeof entry.content === "string" && entry.content.includes("default runtime switched to linux"),
+      ),
+    ).toBe(true);
   });
 
   it("supports natural-language sticky runtime switches without enqueuing a turn", async () => {
@@ -327,7 +468,12 @@ describe("AdvaitaBroker", () => {
     expect(broker.getQueuedCount("natural-switch")).toBe(0);
     expect(broker.getActiveTurn("natural-switch")).toBeNull();
     expect(broker.loadSession("natural-switch").metadata.currentRuntimeId).toBe("linux");
-    expect(findLastMessage(mac.messages, "broker.notice")?.message).toContain("Runtime switched to linux");
+    const switchAppend = findLastMessage(mac.messages, "broker.session.entries");
+    expect(
+      switchAppend?.entries.some(
+        (entry) => entry.type === "custom_message" && typeof entry.content === "string" && entry.content.includes("default runtime switched to linux"),
+      ),
+    ).toBe(true);
   });
 
   it("reassigns an active turn after executor disconnect without duplicating the committed user turn", async () => {

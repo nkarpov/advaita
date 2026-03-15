@@ -22,11 +22,16 @@ function escapeRegex(value: string): string {
 
 function stripLeadingSessionRuntimeDirective(text: string, runtimeId: string): string | null {
   const escapedRuntimeId = escapeRegex(runtimeId);
+  const originRelative = "(?:local|here|(?:this|my)\\s+machine)";
   const patterns = [
     new RegExp(`^\\s*(?:ok(?:ay)?\\s+)?(?:switch|move)\\s+(?:this\\s+)?(?:to|onto|over\\s+to)\\s+${escapedRuntimeId}\\s*(?:[,;]|(?:and|then)\\s+)?`, "i"),
     new RegExp(`^\\s*(?:ok(?:ay)?\\s+)?(?:stay|keep(?:\\s+working)?|from\\s+now\\s+on\\s+use)\\s+(?:on|in)?\\s*${escapedRuntimeId}\\s*(?:[,;]|(?:and|then)\\s+)?`, "i"),
     new RegExp(`^\\s*(?:ok(?:ay)?\\s+)?(?:you(?:'| a)?re|ur)\\s+(?:now\\s+)?(?:on|in)\\s+${escapedRuntimeId}\\s*(?:[,;]|(?:and|then)\\s+)?`, "i"),
     new RegExp(`^\\s*\\/runtime\\s+${escapedRuntimeId}\\s*(?:[,;]|(?:and|then)\\s+)?`, "i"),
+    new RegExp(`^\\s*(?:ok(?:ay)?\\s+)?(?:switch|move)\\s+(?:this\\s+)?(?:to|onto|over\\s+to)\\s+${originRelative}\\s*(?:[,;]|(?:and|then)\\s+)?`, "i"),
+    new RegExp(`^\\s*(?:ok(?:ay)?\\s+)?(?:stay|keep(?:\\s+working)?|from\\s+now\\s+on\\s+use)\\s+(?:on|in)?\\s*${originRelative}\\s*(?:[,;]|(?:and|then)\\s+)?`, "i"),
+    new RegExp(`^\\s*(?:ok(?:ay)?\\s+)?(?:you(?:'| a)?re|ur)\\s+(?:now\\s+)?(?:on|in)\\s+${originRelative}\\s*(?:[,;]|(?:and|then)\\s+)?`, "i"),
+    new RegExp(`^\\s*\\/runtime\\s+local\\s*(?:[,;]|(?:and|then)\\s+)?`, "i"),
   ];
 
   for (const pattern of patterns) {
@@ -47,9 +52,13 @@ export function parseTurnRoutingIntentJson(raw: string): TurnRoutingIntent {
   return turnRoutingIntentSchema.parse(JSON.parse(raw));
 }
 
-export function extractTurnRoutingIntent(text: string, availableRuntimeIds: string[]): TurnRoutingIntent {
+export function extractTurnRoutingIntent(
+  text: string,
+  availableRuntimeIds: string[],
+  originRuntimeId?: string,
+): TurnRoutingIntent {
   const trimmed = text.trim();
-  const runtimeDirective = parseRequestedRuntimeDirective(trimmed, availableRuntimeIds);
+  const runtimeDirective = parseRequestedRuntimeDirective(trimmed, availableRuntimeIds, originRuntimeId);
   const requestedModelQuery = extractRequestedModelQuery(trimmed);
 
   if (!runtimeDirective) {
@@ -81,7 +90,7 @@ export function extractTurnRoutingIntent(text: string, availableRuntimeIds: stri
       requestedRuntimeId: runtimeDirective.requestedRuntimeId,
       runtimeScope: "session",
       requestedModelQuery,
-      executionText,
+      executionText: trimmed,
       routingSource: "heuristic",
     };
   }

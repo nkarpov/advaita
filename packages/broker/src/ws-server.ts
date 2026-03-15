@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import { parseClientMessage, serializeProtocolMessage } from "@advaita/shared";
@@ -20,6 +20,7 @@ export class AdvaitaBrokerWsServer {
     this.host = options.host;
     this.port = options.port;
     this.broker = new AdvaitaBroker(options);
+    this.server.on("request", (req, res) => this.handleHttpRequest(req, res));
   }
 
   async listen(): Promise<void> {
@@ -87,6 +88,27 @@ export class AdvaitaBrokerWsServer {
 
   getBroker(): AdvaitaBroker {
     return this.broker;
+  }
+
+  private handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
+    const url = new URL(req.url ?? "/", `http://${req.headers.host ?? `${this.host}:${this.port}`}`);
+
+    if (req.method === "GET" && url.pathname === "/healthz") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(`${JSON.stringify({ ok: true })}\n`);
+      return;
+    }
+
+    const sessionMatch = url.pathname.match(/^\/sessions\/([^/]+)$/);
+    if (req.method === "GET" && sessionMatch?.[1]) {
+      const sessionName = decodeURIComponent(sessionMatch[1]);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(`${JSON.stringify({ sessionName, exists: this.broker.hasSession(sessionName) })}\n`);
+      return;
+    }
+
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(`${JSON.stringify({ error: "not_found" })}\n`);
   }
 
   private sendNotice(socket: WebSocket, level: "info" | "warning" | "error", message: string): void {

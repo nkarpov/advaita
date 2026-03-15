@@ -31,6 +31,19 @@ describe("runtime routing", () => {
       });
   });
 
+  it("resolves origin-relative local aliases to the submitting runtime", () => {
+    expect(parseRequestedRuntimeDirective("switch to local", ["mac", "linux"], "linux"))
+      .toEqual({
+        requestedRuntimeId: "linux",
+        runtimeScope: "session",
+      });
+    expect(parseRequestedRuntimeDirective("run this locally", ["mac", "linux"], "linux"))
+      .toEqual({
+        requestedRuntimeId: "linux",
+        runtimeScope: "turn",
+      });
+  });
+
   it("uses the shared current runtime before origin when there is no explicit runtime", () => {
     expect(
       resolveExecutionRuntime({

@@ -83,4 +83,42 @@ describe("AdvaitaBrokerWsServer", () => {
 
     socket.close();
   });
+
+  it("serves session existence checks over HTTP for discovery", async () => {
+    server = new AdvaitaBrokerWsServer({
+      host: "127.0.0.1",
+      port: 0,
+      dataDir: `/tmp/advaita-broker-http-${Date.now()}`,
+      turnIntentRouter: new HeuristicTurnIntentRouter(),
+    });
+    await server.listen();
+
+    const baseUrl = server.address.replace(/^ws/i, "http");
+
+    const missing = await fetch(`${baseUrl}/sessions/demo`);
+    expect(await missing.json()).toEqual({ sessionName: "demo", exists: false });
+
+    const socket = new WebSocket(server.address);
+    await waitForOpen(socket);
+    socket.send(serializeProtocolMessage({
+      type: "client.hello",
+      sessionName: "demo",
+      clientId: "client-mac",
+      runtimeId: "mac",
+      displayName: "Mac",
+      cwd: "/Users/nickkarpov/advaita",
+      modelState: {
+        currentModel: null,
+        availableModels: [],
+        thinkingLevel: "off",
+      },
+    }));
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const existing = await fetch(`${baseUrl}/sessions/demo`);
+    expect(await existing.json()).toEqual({ sessionName: "demo", exists: true });
+
+    socket.close();
+  });
 });

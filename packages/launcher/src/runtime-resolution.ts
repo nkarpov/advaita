@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export interface ResolvedPackageInfo {
   specifier: string;
@@ -10,6 +10,8 @@ export interface ResolvedPackageInfo {
     name?: string;
     version?: string;
     bin?: string | Record<string, string>;
+    main?: string;
+    exports?: unknown;
   };
 }
 
@@ -28,20 +30,63 @@ function findPackageRoot(start: string): string {
   }
 }
 
-function loadPackageInfo(specifier: string, entrypoint: string): ResolvedPackageInfo {
-  const packageRoot = findPackageRoot(entrypoint);
+function resolvePackageEntrypoint(packageRoot: string, packageJson: ResolvedPackageInfo["packageJson"]): string {
+  const rootExport = packageJson.exports && typeof packageJson.exports === "object"
+    ? (packageJson.exports as Record<string, unknown>)["."]
+    : packageJson.exports;
+
+  if (typeof rootExport === "string") {
+    return join(packageRoot, rootExport);
+  }
+
+  if (rootExport && typeof rootExport === "object") {
+    const exportRecord = rootExport as Record<string, unknown>;
+    if (typeof exportRecord.import === "string") {
+      return join(packageRoot, exportRecord.import);
+    }
+    if (typeof exportRecord.default === "string") {
+      return join(packageRoot, exportRecord.default);
+    }
+  }
+
+  if (typeof packageJson.main === "string") {
+    return join(packageRoot, packageJson.main);
+  }
+
+  throw new Error(`Package at ${packageRoot} does not expose an importable entrypoint`);
+}
+
+function loadPackageInfoFromRoot(specifier: string, packageRoot: string): ResolvedPackageInfo {
   const packageJsonPath = join(packageRoot, "package.json");
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
   return {
     specifier,
-    entrypoint,
     packageRoot,
     packageJson,
+    entrypoint: resolvePackageEntrypoint(packageRoot, packageJson),
   };
 }
 
+function loadPackageInfo(specifier: string, entrypoint: string): ResolvedPackageInfo {
+  return loadPackageInfoFromRoot(specifier, findPackageRoot(entrypoint));
+}
+
+function packagePathSegments(specifier: string): string[] {
+  return specifier.startsWith("@") ? specifier.split("/") : [specifier];
+}
+
+function resolveVendoredPackage(specifier: string): ResolvedPackageInfo | undefined {
+  const currentPackage = resolveCurrentPackage(import.meta.url);
+  const packageRoot = join(currentPackage.packageRoot, "vendor", "node_modules", ...packagePathSegments(specifier));
+  const packageJsonPath = join(packageRoot, "package.json");
+  if (!existsSync(packageJsonPath)) {
+    return undefined;
+  }
+  return loadPackageInfoFromRoot(specifier, packageRoot);
+}
+
 export function resolveInstalledPackage(specifier: string): ResolvedPackageInfo {
-  return loadPackageInfo(specifier, fileURLToPath(import.meta.resolve(specifier)));
+  return resolveVendoredPackage(specifier) ?? loadPackageInfo(specifier, fileURLToPath(import.meta.resolve(specifier)));
 }
 
 export function resolveCurrentPackage(importMetaUrl: string, specifier = "@nickkarpov/advaita"): ResolvedPackageInfo {
@@ -61,6 +106,11 @@ export function resolvePackageBin(packageInfo: ResolvedPackageInfo, binName?: st
     throw new Error(`Package ${packageInfo.specifier} does not declare bin ${binName ?? "<default>"}`);
   }
   return join(packageInfo.packageRoot, selected);
+}
+
+export async function importResolvedPackageModule<T>(specifier: string): Promise<T> {
+  const packageInfo = resolveInstalledPackage(specifier);
+  return await import(pathToFileURL(packageInfo.entrypoint).href) as T;
 }
 
 export function resolvePiRuntimeArtifacts(): {

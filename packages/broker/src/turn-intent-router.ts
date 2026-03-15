@@ -76,8 +76,10 @@ const ROUTER_SYSTEM_PROMPT = [
   "- action=switch_runtime only when the message is purely a sticky runtime switch and there is no remaining coding task to execute.",
   "- action=execute for all coding turns, including turns that also change the sticky runtime.",
   "- requestedRuntimeId must be one of the provided runtime IDs or null.",
+  "- If the user says local, locally, here, this machine, or my machine, map requestedRuntimeId to originRuntimeId.",
   "- Extract requestedModelQuery only from the user's words. Do not invent provider/model IDs.",
-  "- executionText should contain only the coding task to run, with routing chatter removed when possible.",
+  "- For action=execute, executionText must preserve the user's original message exactly as typed.",
+  "- Do not rewrite, paraphrase, or strip routing chatter from executionText.",
   "- If the message is only a runtime switch, set executionText to null.",
   "- If unsure about the runtime, leave requestedRuntimeId null and runtimeScope=none.",
   "- Never invent runtime IDs, models, or tasks.",
@@ -106,11 +108,18 @@ function formatModelRef(model: RuntimeModelState["currentModel"]): string | null
   return `${model.provider}/${model.modelId}`;
 }
 
-function normalizeRequestedRuntimeId(requestedRuntimeId: string | null, runtimes: TurnIntentRouterRuntime[]): string | null {
+function normalizeRequestedRuntimeId(
+  requestedRuntimeId: string | null,
+  runtimes: TurnIntentRouterRuntime[],
+  originRuntimeId: string,
+): string | null {
   if (!requestedRuntimeId) return null;
   const direct = runtimes.find((runtime) => runtime.runtimeId === requestedRuntimeId);
   if (direct) return direct.runtimeId;
   const folded = requestedRuntimeId.toLowerCase();
+  if (["local", "locally", "here", "this machine", "my machine", "this-machine", "my-machine"].includes(folded)) {
+    return runtimes.find((runtime) => runtime.runtimeId === originRuntimeId)?.runtimeId ?? null;
+  }
   return runtimes.find((runtime) => runtime.runtimeId.toLowerCase() === folded)?.runtimeId ?? null;
 }
 
@@ -126,7 +135,11 @@ function stripMarkdownCodeFence(text: string): string {
   return fenced?.[1]?.trim() ?? trimmed;
 }
 
-function validateRouterPayload(payload: unknown, runtimes: TurnIntentRouterRuntime[]): TurnRoutingIntent {
+function validateRouterPayload(
+  payload: unknown,
+  runtimes: TurnIntentRouterRuntime[],
+  originRuntimeId: string,
+): TurnRoutingIntent {
   if (!isRecord(payload)) {
     throw new Error("Router payload was not an object");
   }
@@ -144,7 +157,7 @@ function validateRouterPayload(payload: unknown, runtimes: TurnIntentRouterRunti
     throw new Error(`Router returned invalid routingSource: ${String(routingSource)}`);
   }
 
-  const requestedRuntimeId = normalizeRequestedRuntimeId(coerceString(payload.requestedRuntimeId), runtimes);
+  const requestedRuntimeId = normalizeRequestedRuntimeId(coerceString(payload.requestedRuntimeId), runtimes, originRuntimeId);
   const requestedModelQuery = coerceString(payload.requestedModelQuery);
   const executionText = coerceString(payload.executionText);
 
@@ -186,6 +199,17 @@ function validateRouterPayload(payload: unknown, runtimes: TurnIntentRouterRunti
   };
 }
 
+function finalizeExecutionText(intent: TurnRoutingIntent, originalText: string): TurnRoutingIntent {
+  if (intent.action !== "execute") {
+    return intent;
+  }
+
+  return {
+    ...intent,
+    executionText: originalText.trim(),
+  };
+}
+
 function buildRouterPrompt(input: TurnIntentRouterInput): string {
   return JSON.stringify(
     {
@@ -218,7 +242,7 @@ function buildRouterPrompt(input: TurnIntentRouterInput): string {
             requestedRuntimeId: "linux",
             runtimeScope: "session",
             requestedModelQuery: "gpt 5",
-            executionText: "inspect the build logs",
+            executionText: "switch to linux and inspect the build logs using gpt 5",
             routingSource: "llm",
           },
         },
@@ -229,7 +253,18 @@ function buildRouterPrompt(input: TurnIntentRouterInput): string {
             requestedRuntimeId: "mac",
             runtimeScope: "turn",
             requestedModelQuery: "claude sonnet 4.5",
-            executionText: "run this",
+            executionText: "run this on mac using claude sonnet 4.5",
+            routingSource: "llm",
+          },
+        },
+        {
+          user: "switch to local",
+          output: {
+            action: "switch_runtime",
+            requestedRuntimeId: "mac",
+            runtimeScope: "session",
+            requestedModelQuery: null,
+            executionText: null,
             routingSource: "llm",
           },
         },
@@ -350,9 +385,13 @@ async function resolveRouterModel(
 
 export class HeuristicTurnIntentRouter implements TurnIntentRouter {
   async routeTurn(input: TurnIntentRouterInput): Promise<TurnRoutingIntent> {
-    return extractTurnRoutingIntent(
+    return finalizeExecutionText(
+      extractTurnRoutingIntent(
+        input.text,
+        input.runtimes.map((runtime) => runtime.runtimeId),
+        input.originRuntimeId,
+      ),
       input.text,
-      input.runtimes.map((runtime) => runtime.runtimeId),
     );
   }
 }
@@ -395,7 +434,10 @@ export class PiTurnIntentRouter implements TurnIntentRouter {
       throw new Error(response.errorMessage || `Router model ${model.provider}/${model.id} returned ${response.stopReason}`);
     }
 
-    return validateRouterPayload(extractPayloadFromAssistantMessage(response), input.runtimes);
+    return finalizeExecutionText(
+      validateRouterPayload(extractPayloadFromAssistantMessage(response), input.runtimes, input.originRuntimeId),
+      input.text,
+    );
   }
 }
 

@@ -27,12 +27,34 @@ function buildSessionPatterns(runtimeId: string): RegExp[] {
   ];
 }
 
+function buildOriginRelativeTurnPatterns(): RegExp[] {
+  return [
+    /\b(?:run|execute|do)\b[^\n]{0,160}?\b(?:locally|here|on\s+(?:this|my)\s+machine)\b/i,
+    /\broute\s+(?:this\s+)?(?:to|onto|over\s+to)\s+(?:local|here)\b/i,
+    /\bhave\s+(?:this|my)?\s*machine\s+(?:do|handle|run)\b/i,
+    /^\s*\/runas\s+local(?:\s+|$)/i,
+  ];
+}
+
+function buildOriginRelativeSessionPatterns(): RegExp[] {
+  return [
+    /\b(?:switch|move)\s+(?:this\s+)?(?:to|onto|over\s+to)\s+(?:local|here|(?:this|my)\s+machine)\b/i,
+    /\b(?:stay|keep(?:\s+working)?|from\s+now\s+on\s+use)\s+(?:on|in)?\s*(?:local|here|(?:this|my)\s+machine)\b/i,
+    /\b(?:you(?:'| a)?re|ur)\s+(?:now\s+)?(?:on|in)\s+(?:local|here|(?:this|my)\s+machine)\b/i,
+    /^\s*\/runtime\s+local(?:\s+|$)/i,
+  ];
+}
+
 export interface RequestedRuntimeDirective {
   requestedRuntimeId: string;
   runtimeScope: Exclude<RuntimeScope, "none">;
 }
 
-export function parseRequestedRuntimeDirective(text: string, availableRuntimeIds: string[]): RequestedRuntimeDirective | null {
+export function parseRequestedRuntimeDirective(
+  text: string,
+  availableRuntimeIds: string[],
+  originRuntimeId?: string,
+): RequestedRuntimeDirective | null {
   const normalizedRuntimeIds = availableRuntimeIds
     .filter((runtimeId) => RUNTIME_ID_PATTERN.test(runtimeId))
     .sort((a, b) => b.length - a.length);
@@ -42,6 +64,17 @@ export function parseRequestedRuntimeDirective(text: string, availableRuntimeIds
       if (pattern.test(text)) {
         return {
           requestedRuntimeId: runtimeId,
+          runtimeScope: "session",
+        };
+      }
+    }
+  }
+
+  if (originRuntimeId && availableRuntimeIds.includes(originRuntimeId)) {
+    for (const pattern of buildOriginRelativeSessionPatterns()) {
+      if (pattern.test(text)) {
+        return {
+          requestedRuntimeId: originRuntimeId,
           runtimeScope: "session",
         };
       }
@@ -59,11 +92,22 @@ export function parseRequestedRuntimeDirective(text: string, availableRuntimeIds
     }
   }
 
+  if (originRuntimeId && availableRuntimeIds.includes(originRuntimeId)) {
+    for (const pattern of buildOriginRelativeTurnPatterns()) {
+      if (pattern.test(text)) {
+        return {
+          requestedRuntimeId: originRuntimeId,
+          runtimeScope: "turn",
+        };
+      }
+    }
+  }
+
   return null;
 }
 
-export function parseRequestedRuntime(text: string, availableRuntimeIds: string[]): string | null {
-  return parseRequestedRuntimeDirective(text, availableRuntimeIds)?.requestedRuntimeId ?? null;
+export function parseRequestedRuntime(text: string, availableRuntimeIds: string[], originRuntimeId?: string): string | null {
+  return parseRequestedRuntimeDirective(text, availableRuntimeIds, originRuntimeId)?.requestedRuntimeId ?? null;
 }
 
 export interface ResolveExecutionRuntimeInput {

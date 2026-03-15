@@ -15,6 +15,7 @@ import { SessionStore } from "./session-store.js";
 import {
   createAdvaitaTurnEntry,
   createAssistantErrorEntry,
+  createCustomMessageEntry,
   createMessageEntry,
   lastEntryId,
 } from "./session-entries.js";
@@ -86,25 +87,90 @@ function assignmentToSubmitted(assignment: TurnAssignment): SubmittedTurn {
   };
 }
 
-function rewriteSnapshotForExecution(snapshot: SessionSnapshot, executionText: string, originalText: string): SessionSnapshot {
-  if (executionText.trim() === originalText.trim()) {
-    return snapshot;
-  }
+function createSubmittedTurnEntries(snapshot: SessionSnapshot, submitted: Pick<SubmittedTurn, "turnId" | "text" | "originClientId" | "originRuntimeId" | "originCwd" | "submittedAt">) {
+  const turnData: AdvaitaTurnEntryData = {
+    turnId: submitted.turnId,
+    originClientId: submitted.originClientId,
+    originRuntimeId: submitted.originRuntimeId,
+    originCwd: submitted.originCwd,
+    requestedRuntimeId: null,
+    runtimeScope: null,
+    requestedModelQuery: null,
+    routingSource: null,
+    executionRuntimeId: null,
+    executionClientId: null,
+    executionCwd: null,
+    queuedAt: submitted.submittedAt,
+  };
+  const turnEntry = createAdvaitaTurnEntry(turnData, lastEntryId(snapshot.entries));
+  const userEntry = createMessageEntry(
+    {
+      role: "user",
+      content: submitted.text,
+      timestamp: Date.now(),
+    },
+    turnEntry.id,
+  );
+  return { turnEntry, userEntry };
+}
 
-  const cloned = structuredClone(snapshot);
-  for (let index = cloned.entries.length - 1; index >= 0; index--) {
-    const entry = cloned.entries[index];
-    if (entry?.type !== "message" || entry.message.role !== "user") {
-      continue;
+function formatModelLabel(model: RuntimeModelState["currentModel"]): string | null {
+  if (!model) {
+    return null;
+  }
+  return model.name ?? `${model.provider}/${model.modelId}`;
+}
+
+function sameModelRef(
+  left: RuntimeModelState["currentModel"],
+  right: RuntimeModelState["currentModel"],
+): boolean {
+  if (!left && !right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return left.provider === right.provider && left.modelId === right.modelId;
+}
+
+function buildTurnRouteNotice(
+  submitted: SubmittedTurn,
+  executionRuntimeId: string,
+  currentRuntimeId: string | null,
+): string | null {
+  const segments: string[] = [];
+
+  if (submitted.runtimeScope === "session" && submitted.requestedRuntimeId) {
+    segments.push(`↻ default runtime switched to ${executionRuntimeId} for this turn and future turns`);
+  } else if (submitted.runtimeScope === "turn" && submitted.requestedRuntimeId) {
+    let text = `↪ this turn will execute on ${executionRuntimeId}`;
+    const defaultRuntimeId = currentRuntimeId ?? submitted.originRuntimeId;
+    if (defaultRuntimeId && defaultRuntimeId !== executionRuntimeId) {
+      text += ` (default remains ${defaultRuntimeId})`;
     }
-    entry.message = {
-      ...entry.message,
-      content: executionText,
-    };
-    return cloned;
+    segments.push(text);
+  } else if (submitted.requestedModelQuery) {
+    segments.push(`↪ this turn will execute on ${executionRuntimeId}`);
   }
 
-  return snapshot;
+  if (submitted.requestedModelQuery) {
+    segments.push(`requested model: ${submitted.requestedModelQuery}`);
+  }
+
+  return segments.length > 0 ? segments.join(" · ") : null;
+}
+
+function buildModelSwitchNotice(runtimeId: string, modelState: RuntimeModelState): string | null {
+  const label = formatModelLabel(modelState.currentModel);
+  if (!label) {
+    return null;
+  }
+  return `↻ ${runtimeId} model set to ${label}`;
+}
+
+function buildJoinNotice(displayName: string, runtimeId: string): string {
+  return `[advaita] ${displayName} joined on ${runtimeId}`;
 }
 
 export class AdvaitaBroker {
@@ -124,6 +190,7 @@ export class AdvaitaBroker {
   connectClient(message: Extract<ClientMessage, { type: "client.hello" }>, sink: BrokerSink): BrokerConnection {
     const state = this.getSessionState(message.sessionName);
     const existing = state.clients.get(message.clientId);
+    const otherClientsConnected = Array.from(state.clients.values()).some((client) => client.clientId !== message.clientId);
     const connectedAt = existing?.connectedAt ?? this.now();
     const client: ConnectedClient = {
       sink,
@@ -140,7 +207,14 @@ export class AdvaitaBroker {
     };
     state.clients.set(client.clientId, client);
 
-    const snapshot = this.store.load(message.sessionName);
+    let snapshot = this.store.load(message.sessionName);
+    if (!snapshot.metadata.currentRuntimeId) {
+      const initialRuntimeId = this.resolveInitialCurrentRuntimeId(message.sessionName);
+      if (initialRuntimeId) {
+        snapshot = this.store.updateMetadata(message.sessionName, { currentRuntimeId: initialRuntimeId });
+      }
+    }
+
     this.send(client, {
       type: "broker.snapshot",
       session: snapshot,
@@ -152,6 +226,27 @@ export class AdvaitaBroker {
       executionCwd: state.activeTurn?.assignment.executionCwd ?? null,
     });
 
+    if (!existing && otherClientsConnected) {
+      const joinEntry = createCustomMessageEntry(
+        "advaita",
+        buildJoinNotice(client.displayName, client.runtimeId),
+        lastEntryId(snapshot.entries),
+        {
+          kind: "presence_join",
+          clientId: client.clientId,
+          runtimeId: client.runtimeId,
+          displayName: client.displayName,
+        },
+      );
+      const updatedSnapshot = this.store.appendEntries(message.sessionName, [joinEntry]);
+      this.broadcast(message.sessionName, {
+        type: "broker.session.entries",
+        entries: [joinEntry],
+        metadata: updatedSnapshot.metadata,
+      });
+    }
+
+    this.broadcastTurnState(message.sessionName);
     this.broadcastPresence(message.sessionName);
     this.startNextTurn(message.sessionName);
     return { sessionName: message.sessionName, clientId: message.clientId };
@@ -251,6 +346,10 @@ export class AdvaitaBroker {
     return this.store.load(sessionName);
   }
 
+  hasSession(sessionName: string): boolean {
+    return this.store.exists(sessionName);
+  }
+
   getPresence(sessionName: string): ClientPresence[] {
     return Array.from(this.getSessionState(sessionName).clients.values())
       .map((client) => ({
@@ -276,6 +375,30 @@ export class AdvaitaBroker {
   }
 
   private async handleSubmittedTurn(sessionName: string, client: ConnectedClient, text: string): Promise<void> {
+    const state = this.getSessionState(sessionName);
+    const turnId = this.createTurnId();
+    const submittedAt = this.now();
+    let alreadyCommitted = false;
+
+    if (!state.activeTurn && state.queue.length === 0) {
+      const snapshot = this.store.load(sessionName);
+      const { turnEntry, userEntry } = createSubmittedTurnEntries(snapshot, {
+        turnId,
+        text,
+        originClientId: client.clientId,
+        originRuntimeId: client.runtimeId,
+        originCwd: client.cwd,
+        submittedAt,
+      });
+      const committedSnapshot = this.store.appendEntries(sessionName, [turnEntry, userEntry]);
+      this.broadcast(sessionName, {
+        type: "broker.session.entries",
+        entries: [turnEntry, userEntry],
+        metadata: committedSnapshot.metadata,
+      });
+      alreadyCommitted = true;
+    }
+
     const intent = await this.turnIntentRouter.routeTurn({
       text,
       originRuntimeId: client.runtimeId,
@@ -303,22 +426,21 @@ export class AdvaitaBroker {
       return;
     }
 
-    const state = this.getSessionState(sessionName);
     state.queue.push({
       submitted: {
-        turnId: this.createTurnId(),
+        turnId,
         text,
         originClientId: client.clientId,
         originRuntimeId: client.runtimeId,
         originCwd: client.cwd,
-        submittedAt: this.now(),
+        submittedAt,
         requestedRuntimeId: intent.requestedRuntimeId,
         runtimeScope: intent.runtimeScope,
         requestedModelQuery: intent.requestedModelQuery,
         executionText: intent.executionText?.trim() || text.trim(),
         routingSource: intent.routingSource,
       },
-      alreadyCommitted: false,
+      alreadyCommitted,
     });
     this.broadcastPresence(sessionName);
     this.broadcastTurnState(sessionName);
@@ -369,6 +491,8 @@ export class AdvaitaBroker {
     state.queue.shift();
 
     let assignmentSnapshot = snapshot;
+    const routeNotice = buildTurnRouteNotice(queued.submitted, resolution.executionRuntimeId, snapshot.metadata.currentRuntimeId);
+
     if (!queued.alreadyCommitted) {
       const turnData: AdvaitaTurnEntryData = {
         turnId: queued.submitted.turnId,
@@ -378,7 +502,6 @@ export class AdvaitaBroker {
         requestedRuntimeId: resolution.requestedRuntimeId,
         runtimeScope: queued.submitted.runtimeScope,
         requestedModelQuery: queued.submitted.requestedModelQuery,
-        executionText: queued.submitted.executionText,
         routingSource: queued.submitted.routingSource,
         executionRuntimeId: resolution.executionRuntimeId,
         executionClientId: executor.clientId,
@@ -394,13 +517,45 @@ export class AdvaitaBroker {
         },
         turnEntry.id,
       );
-      assignmentSnapshot = this.store.appendEntries(sessionName, [turnEntry, userEntry], {
+      const entries = [turnEntry, userEntry];
+      if (routeNotice) {
+        entries.push(
+          createCustomMessageEntry("advaita", routeNotice, userEntry.id, {
+            kind: "turn_route",
+            executionRuntimeId: resolution.executionRuntimeId,
+            runtimeScope: queued.submitted.runtimeScope,
+            requestedModelQuery: queued.submitted.requestedModelQuery,
+          }),
+        );
+      }
+      assignmentSnapshot = this.store.appendEntries(sessionName, entries, {
         currentRuntimeId: resolution.persistedCurrentRuntimeId,
         activeTurnId: queued.submitted.turnId,
       });
       this.broadcast(sessionName, {
         type: "broker.session.entries",
-        entries: [turnEntry, userEntry],
+        entries,
+        metadata: assignmentSnapshot.metadata,
+      });
+    } else if (routeNotice) {
+      const noticeEntry = createCustomMessageEntry(
+        "advaita",
+        routeNotice,
+        lastEntryId(snapshot.entries),
+        {
+          kind: "turn_route",
+          executionRuntimeId: resolution.executionRuntimeId,
+          runtimeScope: queued.submitted.runtimeScope,
+          requestedModelQuery: queued.submitted.requestedModelQuery,
+        },
+      );
+      assignmentSnapshot = this.store.appendEntries(sessionName, [noticeEntry], {
+        currentRuntimeId: resolution.persistedCurrentRuntimeId,
+        activeTurnId: queued.submitted.turnId,
+      });
+      this.broadcast(sessionName, {
+        type: "broker.session.entries",
+        entries: [noticeEntry],
         metadata: assignmentSnapshot.metadata,
       });
     } else {
@@ -410,16 +565,10 @@ export class AdvaitaBroker {
       });
     }
 
-    const executorSnapshot = rewriteSnapshotForExecution(
-      assignmentSnapshot,
-      queued.submitted.executionText,
-      queued.submitted.text,
-    );
-
     const assignment: TurnAssignment = {
       ...queued.submitted,
       sessionName,
-      snapshot: executorSnapshot,
+      snapshot: assignmentSnapshot,
       executionRuntimeId: resolution.executionRuntimeId,
       executionClientId: executor.clientId,
       executionCwd: executor.cwd,
@@ -454,13 +603,20 @@ export class AdvaitaBroker {
       return;
     }
 
-    this.store.updateMetadata(sessionName, { currentRuntimeId: runtimeId });
-    this.broadcastTurnState(sessionName);
+    const snapshot = this.store.load(sessionName);
+    const noticeEntry = createCustomMessageEntry(
+      "advaita",
+      `↻ default runtime switched to ${runtimeId}`,
+      lastEntryId(snapshot.entries),
+      { kind: "runtime_switch", runtimeId },
+    );
+    const updatedSnapshot = this.store.appendEntries(sessionName, [noticeEntry], { currentRuntimeId: runtimeId });
     this.broadcast(sessionName, {
-      type: "broker.notice",
-      level: "info",
-      message: `Runtime switched to ${runtimeId}`,
+      type: "broker.session.entries",
+      entries: [noticeEntry],
+      metadata: updatedSnapshot.metadata,
     });
+    this.broadcastTurnState(sessionName);
   }
 
   private handleTurnCommit(sessionName: string, client: ConnectedClient, commit: TurnCommit): void {
@@ -473,7 +629,27 @@ export class AdvaitaBroker {
       return;
     }
 
-    const updatedSnapshot = this.store.appendEntries(sessionName, commit.entries, {
+    const modelChanged = !sameModelRef(client.modelState.currentModel, commit.modelState.currentModel);
+    const appendedEntries = [...commit.entries];
+    if (modelChanged) {
+      const noticeText = buildModelSwitchNotice(activeTurn.assignment.executionRuntimeId, commit.modelState);
+      if (noticeText) {
+        appendedEntries.push(
+          createCustomMessageEntry(
+            "advaita",
+            noticeText,
+            commit.entries.at(-1)?.id ?? this.store.getLeafId(sessionName),
+            {
+              kind: "model_switch",
+              runtimeId: activeTurn.assignment.executionRuntimeId,
+              model: commit.modelState.currentModel,
+            },
+          ),
+        );
+      }
+    }
+
+    const updatedSnapshot = this.store.appendEntries(sessionName, appendedEntries, {
       currentRuntimeId: activeTurn.persistedCurrentRuntimeId,
       activeTurnId: null,
     });
@@ -489,7 +665,7 @@ export class AdvaitaBroker {
       executionCwd: activeTurn.assignment.executionCwd,
       committedAt: this.now(),
       sessionRevision: updatedSnapshot.metadata.revision,
-      entries: structuredClone(commit.entries),
+      entries: structuredClone(appendedEntries),
       modelState: structuredClone(commit.modelState),
     };
 
@@ -585,6 +761,26 @@ export class AdvaitaBroker {
     }
     candidates.sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
     return candidates[0] ?? null;
+  }
+
+  private resolveInitialCurrentRuntimeId(sessionName: string): string | null {
+    const state = this.getSessionState(sessionName);
+    if (state.activeTurn?.assignment.executionRuntimeId) {
+      return state.activeTurn.assignment.executionRuntimeId;
+    }
+
+    const connectedClients = Array.from(state.clients.values()).sort((left, right) => {
+      const connectedAtCompare = left.connectedAt.localeCompare(right.connectedAt);
+      if (connectedAtCompare !== 0) {
+        return connectedAtCompare;
+      }
+      const runtimeCompare = left.runtimeId.localeCompare(right.runtimeId);
+      if (runtimeCompare !== 0) {
+        return runtimeCompare;
+      }
+      return left.clientId.localeCompare(right.clientId);
+    });
+    return connectedClients[0]?.runtimeId ?? null;
   }
 
   private enqueueSubmit(sessionName: string, task: () => Promise<void>): Promise<void> {

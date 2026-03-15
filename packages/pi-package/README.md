@@ -1,48 +1,44 @@
 # @advaita/pi-package
 
-Advaita Pi package/extension.
+Advaita's runtime integration layer for the local coding-agent UI.
 
-## Positioning after Phase 6
+## Role
 
-This package is the real multiplayer Pi client layer, but after Phase 6 it is no longer the primary end-user entrypoint.
-
-End users should go through:
+This package is not the primary end-user entrypoint anymore. End users should install and run:
 
 ```bash
 npm install -g @nickkarpov/advaita
 advaita
 ```
 
-The launcher now owns:
-
-- the `advaita` command
-- the forked Pi runtime it launches
-- auto-loading this package
-- local broker startup/attach for current single-node use
-
-This package remains the right place for multiplayer Pi client behavior itself.
+The launcher owns runtime resolution and process startup. This package owns the in-session shared-runtime behavior.
 
 ## Responsibilities
 
-- connect a real Pi session to the Advaita broker
+- connect the local runtime to the Advaita broker
 - intercept shared free-text submit before local execution
-- leave local Pi commands like `/login`, `/logout`, and `!` bash local
-- sync broker snapshots and committed entries into the local Pi session
-- render foreign live turns through Pi-native UI hooks from our fork
-- execute assigned turns locally via real Pi continuation
-- publish local presence, typing, and runtime-local model state
+- keep local-only commands like `/login`, `/logout`, and `!` local
+- hydrate broker snapshots and committed entries into the local session
+- render foreign streamed events live through Pi-native UI seams
+- execute assigned turns locally from synchronized state
+- publish presence, typing, and runtime-local model state
+- show runtime/session UI, notices, and runtime picker behavior inside the TUI
 
-## Current commands
+## Current in-session UX
 
-- `/advaita-connect <ws-url> <session> [runtimeId]`
-- `/advaita-disconnect`
+The current build includes:
+
+- current/local runtime header above the input
+- pre-execution **Attuning...** state
+- durable transcript notices for joins, routing, runtime switches, and model changes
+- `Ctrl+R` runtime picker
+- `/advaita-invite`
 - `/advaita-debug`
-- `/route-debug`
 - `/runtime <runtimeId>`
 
-## Current low-level development bootstrap
+## Manual low-level development launch
 
-If you are working directly on the Pi package/client layer, you can still launch it with the forked Pi runtime manually:
+If you are working directly on this layer, you can still launch it manually with the forked runtime:
 
 ```bash
 cd /Users/nickkarpov/pi-mono
@@ -53,11 +49,11 @@ node packages/coding-agent/dist/cli.js \
   --advaita-runtime mac
 ```
 
-Do **not** use an older globally installed `pi` binary here. Advaita depends on fork-only extension APIs such as `replaceSessionContents()`, `importSessionEntries()`, and `continueSession()`.
+Do **not** use an older unrelated global `pi` binary here. Advaita depends on fork-only APIs such as `replaceSessionContents()`, `importSessionEntries()`, and `continueSession()`.
 
-## Current limitations
+## Known limitations
 
 - shared image turns are not supported yet
-- `/new`, `/resume`, `/tree`, and `/fork` are blocked while connected
-- footer/status is implemented via Pi footer status text first; richer shared widgets can come later
-- richer shared-session command semantics still continue in later phases
+- `/new`, `/resume`, `/tree`, and `/fork` remain blocked while connected
+- queued-turn transcript semantics still need more polish
+- pure remote model-switch-only control turns are not done yet

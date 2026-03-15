@@ -90,7 +90,7 @@ describe("turn intent routers", () => {
       requestedRuntimeId: "linux",
       runtimeScope: "session",
       requestedModelQuery: "gpt 5",
-      executionText: "inspect the build logs using gpt 5",
+      executionText: "switch to linux and inspect the build logs using gpt 5",
       routingSource: "heuristic",
     });
   });
@@ -139,7 +139,7 @@ describe("turn intent routers", () => {
       requestedRuntimeId: "linux",
       runtimeScope: "session",
       requestedModelQuery: "gpt 5",
-      executionText: "inspect the build logs",
+      executionText: "switch to linux and inspect the build logs using gpt 5",
       routingSource: "llm",
     });
   });
@@ -178,7 +178,7 @@ describe("turn intent routers", () => {
       requestedRuntimeId: "linux",
       runtimeScope: "session",
       requestedModelQuery: "gpt 5",
-      executionText: "inspect the build logs using gpt 5",
+      executionText: "switch to linux and inspect the build logs using gpt 5",
       routingSource: "heuristic",
     });
   });
@@ -197,6 +197,18 @@ describe("turn intent routers", () => {
     expect(inspection.detail).toContain("pi:openai/gpt-5.1-codex-mini");
   });
 
+  it("normalizes local aliases to the origin runtime", async () => {
+    const router = new HeuristicTurnIntentRouter();
+    await expect(router.routeTurn({ ...routerInput, text: "switch to local" })).resolves.toEqual({
+      action: "switch_runtime",
+      requestedRuntimeId: "mac",
+      runtimeScope: "session",
+      requestedModelQuery: null,
+      executionText: null,
+      routingSource: "heuristic",
+    });
+  });
+
   it("uses heuristic routing automatically when no Pi-authenticated router model is available", async () => {
     const router = createTurnIntentRouter({
       ADVAITA_ROUTER_MODE: "heuristic",
@@ -208,7 +220,7 @@ describe("turn intent routers", () => {
       requestedRuntimeId: "linux",
       runtimeScope: "session",
       requestedModelQuery: "gpt 5",
-      executionText: "inspect the build logs using gpt 5",
+      executionText: "switch to linux and inspect the build logs using gpt 5",
       routingSource: "heuristic",
     });
   });

@@ -1,11 +1,13 @@
 import { hostname, networkInterfaces } from "node:os";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { promisify } from "node:util";
 import WebSocket from "ws";
 import type { BrokerMessage, ClientMessage } from "@advaita/shared";
-import { parseBrokerMessage, serializeProtocolMessage } from "@advaita/shared";
-import { resolveBrokerArtifacts } from "./runtime-resolution.js";
+import { importResolvedPackageModule, resolveBrokerArtifacts } from "./runtime-resolution.js";
 
 export interface EnsureLocalBrokerOptions {
   listenHost: string;
@@ -19,6 +21,38 @@ export interface LocalBrokerHandle {
   shareUrl: string;
   attached: boolean;
   stop(): Promise<void>;
+}
+
+export interface TailscalePeerCandidate {
+  hostName: string;
+  address: string;
+}
+
+export interface DiscoveredSessionHost {
+  hostName: string;
+  address: string;
+  brokerUrl: string;
+}
+
+export interface TailscalePeerDiscoveryResult {
+  available: boolean;
+  peers: TailscalePeerCandidate[];
+  sourceCommand?: string;
+}
+
+export interface DiscoveredSessionHostsResult {
+  available: boolean;
+  matches: DiscoveredSessionHost[];
+  sourceCommand?: string;
+}
+
+type SharedProtocolModule = typeof import("@advaita/shared");
+const execFileAsync = promisify(execFile);
+let sharedProtocolModulePromise: Promise<SharedProtocolModule> | undefined;
+
+function loadSharedProtocolModule(): Promise<SharedProtocolModule> {
+  sharedProtocolModulePromise ??= importResolvedPackageModule<SharedProtocolModule>("@advaita/shared");
+  return sharedProtocolModulePromise;
 }
 
 function brokerConnectHost(listenHost: string): string {
@@ -45,7 +79,141 @@ function guessAdvertiseHost(): string {
   return pickAdvertiseHostFromInterfaces(networkInterfaces()) ?? hostname();
 }
 
+export function getTailscaleStatusCommandCandidates(): Array<{ command: string; args: string[] }> {
+  return [
+    { command: "tailscale", args: ["status", "--json"] },
+    { command: "tailscale.exe", args: ["status", "--json"] },
+    { command: "/mnt/c/Program Files/Tailscale/tailscale.exe", args: ["status", "--json"] },
+    {
+      command: "powershell.exe",
+      args: ["-NoProfile", "-Command", "tailscale status --json"],
+    },
+    {
+      command: "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+      args: ["-NoProfile", "-Command", "tailscale status --json"],
+    },
+  ];
+}
+
+export function localSessionExists(dataDir: string, sessionName: string): boolean {
+  const indexPath = join(dataDir, "index.json");
+  if (!existsSync(indexPath)) {
+    return false;
+  }
+
+  try {
+    const index = JSON.parse(readFileSync(indexPath, "utf8")) as Record<string, unknown>;
+    return Object.prototype.hasOwnProperty.call(index, sessionName);
+  } catch {
+    return false;
+  }
+}
+
+export function parseTailscaleStatusJson(raw: string): TailscalePeerCandidate[] {
+  try {
+    const parsed = JSON.parse(raw) as {
+      Peer?: Record<string, { HostName?: string; DNSName?: string; TailscaleIPs?: string[]; Online?: boolean }>;
+    };
+
+    const peers: TailscalePeerCandidate[] = [];
+    for (const peer of Object.values(parsed.Peer ?? {})) {
+      if (peer?.Online === false) {
+        continue;
+      }
+      const hostName = peer?.HostName?.trim() || peer?.DNSName?.split(".")[0]?.trim() || "peer";
+      for (const ip of peer?.TailscaleIPs ?? []) {
+        if (typeof ip !== "string" || ip.includes(":")) {
+          continue;
+        }
+        peers.push({ hostName, address: ip });
+      }
+    }
+
+    const seen = new Set<string>();
+    return peers.filter((peer) => {
+      if (seen.has(peer.address)) {
+        return false;
+      }
+      seen.add(peer.address);
+      return true;
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function getTailscalePeerCandidates(): Promise<TailscalePeerDiscoveryResult> {
+  for (const candidate of getTailscaleStatusCommandCandidates()) {
+    try {
+      const { stdout } = await execFileAsync(candidate.command, candidate.args, {
+        timeout: 1500,
+        maxBuffer: 1024 * 1024,
+        windowsHide: true,
+      });
+      return {
+        available: true,
+        peers: parseTailscaleStatusJson(stdout),
+        sourceCommand: candidate.command,
+      };
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return {
+    available: false,
+    peers: [],
+  };
+}
+
+export async function remoteSessionExists(host: string, port: number, sessionName: string, timeoutMs = 1200): Promise<boolean> {
+  try {
+    const response = await fetch(`http://${host}:${port}/sessions/${encodeURIComponent(sessionName)}`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) {
+      return false;
+    }
+    const payload = await response.json() as { exists?: boolean };
+    return payload.exists === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function discoverTailscaleSessionHosts(
+  sessionName: string,
+  port: number,
+): Promise<DiscoveredSessionHostsResult> {
+  const discovery = await getTailscalePeerCandidates();
+  if (!discovery.available) {
+    return {
+      available: false,
+      matches: [],
+    };
+  }
+
+  const matches = await Promise.all(
+    discovery.peers.map(async (peer) => {
+      if (!(await remoteSessionExists(peer.address, port, sessionName))) {
+        return undefined;
+      }
+      return {
+        hostName: peer.hostName,
+        address: peer.address,
+        brokerUrl: `ws://${peer.address}:${port}`,
+      } satisfies DiscoveredSessionHost;
+    }),
+  );
+  return {
+    available: true,
+    matches: matches.filter((match): match is DiscoveredSessionHost => Boolean(match)),
+    sourceCommand: discovery.sourceCommand,
+  };
+}
+
 async function probeBroker(url: string, timeoutMs = 1500): Promise<boolean> {
+  const { parseBrokerMessage, serializeProtocolMessage } = await loadSharedProtocolModule();
   return await new Promise<boolean>((resolve) => {
     const socket = new WebSocket(url);
     const timeout = setTimeout(() => {

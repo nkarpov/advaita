@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { basename, resolve } from "node:path";
 import { homedir } from "node:os";
 
@@ -5,10 +6,13 @@ export class CliUsageError extends Error {}
 
 export type LaunchMode = "local" | "host" | "join";
 
+export type SessionNameSource = "explicit" | "generated" | "cwd-default";
+
 export interface LaunchCommand {
   kind: "launch";
   mode: LaunchMode;
   sessionName: string;
+  sessionNameSource: SessionNameSource;
   brokerUrl?: string;
   listenHost: string;
   advertiseHost?: string;
@@ -39,6 +43,42 @@ export type ParsedCommand = LaunchCommand | DoctorCommand | VersionCommand | Hel
 const DEFAULT_PORT = 7171;
 const DEFAULT_LOCAL_HOST = "127.0.0.1";
 const DEFAULT_PUBLIC_HOST = "0.0.0.0";
+const FRIENDLY_ADJECTIVES = [
+  "amber",
+  "brisk",
+  "cedar",
+  "daring",
+  "ember",
+  "fable",
+  "glint",
+  "harbor",
+  "indigo",
+  "jolly",
+  "keen",
+  "lunar",
+  "mellow",
+  "nova",
+  "opal",
+  "pine",
+] as const;
+const FRIENDLY_NOUNS = [
+  "badger",
+  "comet",
+  "drift",
+  "falcon",
+  "grove",
+  "heron",
+  "isle",
+  "juniper",
+  "kite",
+  "lynx",
+  "mesa",
+  "otter",
+  "quill",
+  "raven",
+  "spruce",
+  "tidal",
+] as const;
 
 function sanitizeSessionName(value: string): string {
   const sanitized = value
@@ -50,6 +90,13 @@ function sanitizeSessionName(value: string): string {
 
 export function defaultSessionName(cwd: string): string {
   return sanitizeSessionName(basename(cwd));
+}
+
+export function generateFriendlySessionName(random = (max: number) => randomInt(max)): string {
+  const adjective = FRIENDLY_ADJECTIVES[random(FRIENDLY_ADJECTIVES.length)] ?? "amber";
+  const noun = FRIENDLY_NOUNS[random(FRIENDLY_NOUNS.length)] ?? "otter";
+  const suffix = random(36 ** 3).toString(36).padStart(3, "0");
+  return `${adjective}-${noun}-${suffix}`;
 }
 
 function defaultDataDir(): string {
@@ -85,7 +132,13 @@ function splitPassThrough(argv: string[]): { launcherArgs: string[]; piArgs: str
   };
 }
 
-export function parseCliArgs(argv: string[], cwd = process.cwd()): ParsedCommand {
+export function parseCliArgs(
+  argv: string[],
+  cwd = process.cwd(),
+  options?: {
+    generateSessionName?: () => string;
+  },
+): ParsedCommand {
   const { launcherArgs, piArgs } = splitPassThrough(argv);
   if (launcherArgs.includes("--help") || launcherArgs.includes("-h")) {
     return { kind: "help" };
@@ -112,6 +165,7 @@ export function parseCliArgs(argv: string[], cwd = process.cwd()): ParsedCommand
   }
 
   let sessionName: string | undefined;
+  let sessionNameSource: SessionNameSource = "explicit";
   let brokerUrl: string | undefined;
   let listenHost = mode === "host" ? DEFAULT_PUBLIC_HOST : DEFAULT_LOCAL_HOST;
   let advertiseHost: string | undefined;
@@ -129,6 +183,7 @@ export function parseCliArgs(argv: string[], cwd = process.cwd()): ParsedCommand
       case "--session":
         if (!next) throw new CliUsageError("--session requires a value");
         sessionName = sanitizeSessionName(next);
+        sessionNameSource = "explicit";
         index++;
         break;
       case "--broker-url":
@@ -191,7 +246,10 @@ export function parseCliArgs(argv: string[], cwd = process.cwd()): ParsedCommand
         throw new CliUsageError("Specify broker URL either positionally or with --broker-url, not both");
       }
       brokerUrl = normalizeBrokerUrl(positionalValues[0]);
-      sessionName ??= positionalValues[1] ? sanitizeSessionName(positionalValues[1]) : undefined;
+      if (!sessionName && positionalValues[1]) {
+        sessionName = sanitizeSessionName(positionalValues[1]);
+        sessionNameSource = "explicit";
+      }
       if (positionalValues.length > 2) {
         throw new CliUsageError("Too many positional arguments for join");
       }
@@ -200,12 +258,24 @@ export function parseCliArgs(argv: string[], cwd = process.cwd()): ParsedCommand
     throw new CliUsageError("Too many positional arguments");
   } else if (positionalValues.length === 1) {
     sessionName = sanitizeSessionName(positionalValues[0]);
+    sessionNameSource = "explicit";
+  }
+
+  if (!sessionName) {
+    if (mode === "join") {
+      sessionName = defaultSessionName(effectiveCwd);
+      sessionNameSource = "cwd-default";
+    } else {
+      sessionName = sanitizeSessionName((options?.generateSessionName ?? generateFriendlySessionName)());
+      sessionNameSource = "generated";
+    }
   }
 
   return {
     kind: "launch",
     mode,
-    sessionName: sessionName ?? defaultSessionName(effectiveCwd),
+    sessionName,
+    sessionNameSource,
     brokerUrl,
     listenHost,
     advertiseHost,
@@ -224,14 +294,16 @@ export function renderHelpText(): string {
     "",
     "Usage:",
     "  advaita [session] [options] [-- <pi args>]",
-    "  advaita host [session] [options] [-- <pi args>]",
-    "  advaita join <broker-url> [session] [options] [-- <pi args>]",
     "  advaita doctor [--json]",
     "  advaita version [--json]",
     "",
+    "Advanced:",
+    "  advaita host [session] [options] [-- <pi args>]",
+    "  advaita join <broker-url> [session] [options] [-- <pi args>]",
+    "",
     "Options:",
     "  --session <name>         Shared session name",
-    "  --runtime <id>           Runtime id reported to Advaita",
+    "  --runtime <id>           Runtime id reported to Advaita (default: sanitized hostname)",
     "  --display-name <name>    Human-friendly runtime display name",
     "  --broker-url <url>       Use an explicit broker URL instead of auto-starting locally",
     "  --listen-host <host>     Host for auto-started local broker (default: 127.0.0.1 or 0.0.0.0 for host)",
@@ -242,8 +314,8 @@ export function renderHelpText(): string {
     "  -h, --help               Show this help",
     "",
     "Examples:",
-    "  advaita",
-    "  advaita demo",
+    "  advaita                      # create a friendly random session id",
+    "  advaita demo                 # join local session demo if it exists, otherwise ask to host it",
     "  advaita host demo --advertise-host 100.107.78.30",
     "  advaita join 100.107.78.30:7171 demo",
     "  advaita doctor",

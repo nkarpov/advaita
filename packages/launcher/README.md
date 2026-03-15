@@ -1,51 +1,63 @@
 # @nickkarpov/advaita
 
-Owns the user-facing Advaita product surface.
+The published Advaita product package.
 
-## Current role
+## Role
 
-This package is now the real published install/launch surface for Advaita:
+This package owns the real user-facing install and launch surface:
 
 ```bash
 npm install -g @nickkarpov/advaita
 advaita
 ```
 
-## What Phase 6 implemented
+It is responsible for:
 
-- `packages/launcher` is the real `@nickkarpov/advaita` package
-- ships the `advaita` CLI
-- launches the correct forked Pi runtime instead of relying on a global `pi`
-- auto-loads the Advaita Pi package/extension
-- auto-starts or auto-attaches a local broker for normal local/hosted sessions
-- provides `advaita doctor` and `advaita version`
-- supports initial product commands:
-  - `advaita`
-  - `advaita host`
-  - `advaita join`
-  - `advaita doctor`
-  - `advaita version`
+- shipping the `advaita` CLI
+- resolving and launching the controlled Advaita runtime
+- auto-loading the Advaita runtime integration package
+- auto-starting or auto-attaching the local broker for the current single-host architecture
+- exposing user-facing commands like `advaita`, `advaita join`, `advaita host`, `advaita doctor`, and `advaita version`
 
-## Distribution strategy chosen in Phase 6
+## Runtime ownership
 
-Phase 6 chose the **bundle a controlled runtime dependency into Advaita** path.
+Advaita does **not** trust a global `pi` binary in `PATH`.
 
-That means the launcher package pre-packs the exact runtime stack it needs, including:
+Instead, the published package vendors the internal runtime assets it must control:
 
-- the forked `@mariozechner/pi-coding-agent`
-- the Advaita broker package
-- the Advaita Pi package
-- the shared protocol package
-- the runtime dependencies required to launch them without depending on whatever happens to be installed globally
+- forked `@mariozechner/pi-coding-agent`
+- `@advaita/broker`
+- `@advaita/pi-package`
+- `@advaita/shared`
 
-## LLM router configuration
+Public npm dependencies are still installed normally from npm, but the launcher resolves its **own vendored runtime copy** first and executes that directly.
 
-The launcher inherits router configuration from the shell environment and passes it through to the managed local broker.
+So:
 
-Important: the router now reuses the **local Pi auth/model architecture** on the broker host.
+- a globally installed `pi` does not control what `advaita` launches
+- Advaita can require fork-only APIs safely
+- local Pi auth/config state is still reused on each machine
 
-So you do **not** need a separate Advaita router API key anymore.
-If Pi on that machine is already logged in and can see the router model, Advaita can use it.
+## Current product behavior
+
+Today this package supports:
+
+- local session start via `advaita`
+- local attach / Tailscale discovery / prompt-to-host via `advaita <session>`
+- explicit hosting via `advaita host`
+- explicit joins via `advaita join`
+- local preflight diagnostics via `advaita doctor`
+- version/install diagnostics via `advaita version`
+
+## Router model/auth behavior
+
+The router reuses the broker host’s local Pi auth/model environment.
+
+That means:
+
+- no separate Advaita router API key setup
+- if the host machine is already logged in locally, the router can use that model context
+- if router model resolution is unavailable, Advaita falls back to heuristic routing
 
 Typical setup:
 
@@ -56,23 +68,6 @@ advaita doctor
 advaita
 ```
 
-If the selected router model is not available through local Pi auth/config on that machine, Advaita still works and falls back to heuristic routing.
+## Next major phase
 
-## Current validation shape
-
-Typical local validation commands are:
-
-```bash
-cd /Users/nickkarpov/advaita
-npm run build
-node packages/launcher/dist/cli.js doctor
-node packages/launcher/dist/cli.js --help
-```
-
-And product-install validation can be done by packing/installing `@nickkarpov/advaita` into a temporary prefix and running `advaita doctor`.
-
-## Next phase relationship
-
-- Phase 5 made the Pi package/client real
-- Phase 6 turned this package into the real install/launch product surface
-- Phase 7 will evolve the auto-started local broker into a longer-lived managed local Advaita node
+The next big step after the current product-polish slice is **Phase 7: managed local Advaita node lifecycle**.

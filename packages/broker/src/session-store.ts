@@ -148,6 +148,10 @@ export class SessionStore {
     return cloneSnapshot(snapshot);
   }
 
+  exists(name: string): boolean {
+    return this.getRecord(name) !== null;
+  }
+
   getLeafId(name: string): string | null {
     return lastEntryId(this.loadMutable(name).entries);
   }

@@ -34,6 +34,25 @@ export function createCustomEntry(customType: string, data: unknown, parentId: s
   } satisfies SessionEntry;
 }
 
+export function createCustomMessageEntry(
+  customType: string,
+  content: string,
+  parentId: string | null,
+  details?: unknown,
+): SessionEntry {
+  return {
+    type: "custom_message",
+    id: generateEntryId(),
+    parentId,
+    timestamp: new Date().toISOString(),
+    customType,
+    content,
+    details,
+    display: true,
+    excludeFromContext: true,
+  } as SessionEntry;
+}
+
 export function createAdvaitaTurnEntry(data: AdvaitaTurnEntryData, parentId: string | null): SessionEntry {
   return createCustomEntry(ADVAITA_TURN_CUSTOM_TYPE, data, parentId);
 }

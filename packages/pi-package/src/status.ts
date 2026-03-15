@@ -1,6 +1,6 @@
 import type { ClientPresence } from "@advaita/shared";
 
-export interface AdvaitaFooterState {
+export interface AdvaitaStatusState {
   connected: boolean;
   sessionName: string | null;
   runtimeId: string;
@@ -11,36 +11,46 @@ export interface AdvaitaFooterState {
   executorClientId: string | null;
   executionCwd: string | null;
   presence: ClientPresence[];
+  attuningIndicator?: string | null;
 }
 
-function formatPresence(presence: ClientPresence[]): string {
-  if (presence.length === 0) return "no peers";
-  return presence
-    .map((client) => {
-      const model = client.modelState.currentModel?.modelId ?? "default";
-      const suffix = [client.executing ? "exec" : null, client.typing ? "typing" : null].filter(Boolean).join(",",
-      );
-      return `${client.runtimeId}:${model}${suffix ? `(${suffix})` : ""}`;
-    })
-    .join(" ");
+function resolveCurrentExecutionRuntime(state: AdvaitaStatusState): string {
+  return state.executorRuntimeId ?? state.currentRuntimeId ?? state.runtimeId;
 }
 
-export function formatFooterStatus(state: AdvaitaFooterState): string {
+function resolveDefaultRuntime(state: AdvaitaStatusState): string {
+  return state.currentRuntimeId ?? state.runtimeId;
+}
+
+export function formatFooterStatus(_state: AdvaitaStatusState): string | undefined {
+  return undefined;
+}
+
+export function formatRuntimeWidget(state: AdvaitaStatusState): string[] | undefined {
   if (!state.connected || !state.sessionName) {
-    return `off • ${state.runtimeId}`;
+    return undefined;
   }
 
-  const execution = state.executorRuntimeId
-    ? `exec=${state.executorRuntimeId}${state.executorClientId ? `@${state.executorClientId}` : ""}${state.executionCwd ? `:${state.executionCwd}` : ""}`
-    : "exec=idle";
+  const current = resolveCurrentExecutionRuntime(state);
+  const local = state.runtimeId;
+  const defaultRuntime = resolveDefaultRuntime(state);
+  const parts = [
+    `advaita(#${state.sessionName})`,
+    `current: ${current}`,
+    `local: ${local}`,
+  ];
 
-  return [
-    `session=${state.sessionName}`,
-    `runtime=${state.runtimeId}`,
-    `current=${state.currentRuntimeId ?? "none"}`,
-    `turn=${state.activeTurnId ?? "idle"}`,
-    `queue=${state.queuedCount}`,
-    execution,
-    formatPresence(state.presence),
-  ].join(" • ");
+  if (state.activeTurnId && current !== defaultRuntime) {
+    parts.push(`default: ${defaultRuntime}`);
+  }
+
+  if (state.queuedCount > 0) {
+    parts.push(`queue: ${state.queuedCount}`);
+  }
+
+  const lines = [parts.join(" · ")];
+  if (state.attuningIndicator) {
+    lines.push(state.attuningIndicator);
+  }
+  return lines;
 }

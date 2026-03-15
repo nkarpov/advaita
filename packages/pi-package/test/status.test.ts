@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { formatFooterStatus } from "../src/status.js";
+import { formatFooterStatus, formatRuntimeWidget } from "../src/status.js";
 
-describe("formatFooterStatus", () => {
-  it("renders disconnected state", () => {
+describe("status formatting", () => {
+  it("clears the footer when disconnected", () => {
     expect(
       formatFooterStatus({
         connected: false,
@@ -15,58 +15,80 @@ describe("formatFooterStatus", () => {
         executorClientId: null,
         executionCwd: null,
         presence: [],
+        attuningIndicator: null,
       }),
-    ).toContain("off • mac");
+    ).toBeUndefined();
   });
 
-  it("renders connected state with executor and peers", () => {
-    const text = formatFooterStatus({
-      connected: true,
-      sessionName: "demo",
-      runtimeId: "mac",
-      queuedCount: 2,
-      currentRuntimeId: "linux",
-      activeTurnId: "turn-1",
-      executorRuntimeId: "linux",
-      executorClientId: "client-linux",
-      executionCwd: "/home/nick/advaita",
-      presence: [
-        {
-          clientId: "client-mac",
-          runtimeId: "mac",
-          displayName: "Mac",
-          cwd: "/Users/nickkarpov/advaita",
-          connectedAt: "t1",
-          lastSeenAt: "t2",
-          typing: false,
-          executing: false,
-          modelState: {
-            currentModel: { provider: "openai", modelId: "gpt-4", name: "GPT-4" },
-            availableModels: [],
-            thinkingLevel: "off",
-          },
-        },
-        {
-          clientId: "client-linux",
-          runtimeId: "linux",
-          displayName: "Linux",
-          cwd: "/home/nick/advaita",
-          connectedAt: "t1",
-          lastSeenAt: "t2",
-          typing: true,
-          executing: true,
-          modelState: {
-            currentModel: { provider: "openai", modelId: "gpt-5", name: "GPT-5" },
-            availableModels: [],
-            thinkingLevel: "off",
-          },
-        },
-      ],
-    });
+  it("keeps the footer clear even when connected", () => {
+    expect(
+      formatFooterStatus({
+        connected: true,
+        sessionName: "demo",
+        runtimeId: "mac",
+        queuedCount: 0,
+        currentRuntimeId: "linux",
+        activeTurnId: null,
+        executorRuntimeId: null,
+        executorClientId: null,
+        executionCwd: null,
+        presence: [],
+        attuningIndicator: null,
+      }),
+    ).toBeUndefined();
+  });
 
-    expect(text).toContain("session=demo");
-    expect(text).toContain("queue=2");
-    expect(text).toContain("exec=linux@client-linux:/home/nick/advaita");
-    expect(text).toContain("linux:gpt-5(exec,typing)");
+  it("renders the runtime indicator near the input with session, current runtime, and local runtime", () => {
+    expect(
+      formatRuntimeWidget({
+        connected: true,
+        sessionName: "demo",
+        runtimeId: "linux",
+        queuedCount: 0,
+        currentRuntimeId: "mac",
+        activeTurnId: null,
+        executorRuntimeId: null,
+        executorClientId: null,
+        executionCwd: null,
+        presence: [],
+        attuningIndicator: null,
+      }),
+    ).toEqual(["advaita(#demo) · current: mac · local: linux"]);
+  });
+
+  it("shows the sticky default separately during a one-turn remote execution override", () => {
+    expect(
+      formatRuntimeWidget({
+        connected: true,
+        sessionName: "demo",
+        runtimeId: "linux",
+        queuedCount: 2,
+        currentRuntimeId: "linux",
+        activeTurnId: "turn-1",
+        executorRuntimeId: "mac",
+        executorClientId: "client-mac",
+        executionCwd: "/Users/nickkarpov/advaita",
+        presence: [],
+        attuningIndicator: null,
+      }),
+    ).toEqual(["advaita(#demo) · current: mac · local: linux · default: linux · queue: 2"]);
+  });
+
+  it("shows an attuning indicator while the router is deciding", () => {
+    expect(
+      formatRuntimeWidget({
+        connected: true,
+        sessionName: "demo",
+        runtimeId: "linux",
+        queuedCount: 0,
+        currentRuntimeId: "linux",
+        activeTurnId: null,
+        executorRuntimeId: null,
+        executorClientId: null,
+        executionCwd: null,
+        presence: [],
+        attuningIndicator: "⠋ Attuning...",
+      }),
+    ).toEqual(["advaita(#demo) · current: linux · local: linux", "⠋ Attuning..."]);
   });
 });

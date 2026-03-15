@@ -144,7 +144,7 @@ describe("protocol envelopes", () => {
         requestedRuntimeId: "linux",
         runtimeScope: "session",
         requestedModelQuery: "gpt 5",
-        executionText: "inspect the repo",
+        executionText: "switch to linux and inspect the repo using gpt 5",
         routingSource: "llm",
         sessionName: "demo",
         snapshot: sessionSnapshot,

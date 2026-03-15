@@ -14,20 +14,32 @@ describe("turn routing intent", () => {
       });
   });
 
-  it("treats switch-to phrasing as a sticky runtime change plus execution", () => {
+  it("treats switch-to phrasing as a sticky runtime change plus execution without rewriting the text", () => {
     expect(extractTurnRoutingIntent("switch to linux and inspect the repo", ["mac", "linux"]))
       .toEqual({
         action: "execute",
         requestedRuntimeId: "linux",
         runtimeScope: "session",
         requestedModelQuery: null,
-        executionText: "inspect the repo",
+        executionText: "switch to linux and inspect the repo",
         routingSource: "heuristic",
       });
   });
 
   it("detects pure sticky runtime switches with no execution payload", () => {
     expect(extractTurnRoutingIntent("switch to linux", ["mac", "linux"]))
+      .toEqual({
+        action: "switch_runtime",
+        requestedRuntimeId: "linux",
+        runtimeScope: "session",
+        requestedModelQuery: null,
+        executionText: null,
+        routingSource: "heuristic",
+      });
+  });
+
+  it("maps local aliases onto the submitting runtime", () => {
+    expect(extractTurnRoutingIntent("switch to local", ["mac", "linux"], "linux"))
       .toEqual({
         action: "switch_runtime",
         requestedRuntimeId: "linux",

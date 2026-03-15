@@ -100,13 +100,12 @@ export interface AdvaitaTurnEntryData {
   originRuntimeId: string;
   originCwd: string;
   requestedRuntimeId: string | null;
-  runtimeScope: RuntimeScope;
+  runtimeScope: RuntimeScope | null;
   requestedModelQuery: string | null;
-  executionText: string;
-  routingSource: TurnRoutingSource;
-  executionRuntimeId: string;
-  executionClientId: string;
-  executionCwd: string;
+  routingSource: TurnRoutingSource | null;
+  executionRuntimeId: string | null;
+  executionClientId: string | null;
+  executionCwd: string | null;
   queuedAt: string;
 }
 

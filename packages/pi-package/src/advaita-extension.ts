@@ -8,14 +8,16 @@ import type {
   SessionSnapshot,
   TurnAssignment,
 } from "@advaita/shared";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { AgentSessionEvent, ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { BrokerClient } from "./broker-client.js";
 import { isDeferredSharedSessionCommand, shouldBrokerInput } from "./command-classification.js";
 import { resolveModelQuery } from "./model-resolution.js";
-import { formatFooterStatus } from "./status.js";
+import { buildRuntimePickerOptions, RuntimePickerComponent, RUNTIME_PICKER_SHORTCUT } from "./runtime-picker.js";
+import { formatFooterStatus, formatRuntimeWidget } from "./status.js";
 
 interface AdvaitaConnectionConfig {
   url: string;
+  shareUrl: string;
   sessionName: string;
   runtimeId: string;
   displayName: string;
@@ -28,6 +30,8 @@ function sanitizeRuntimeId(value: string): string {
     .replace(/[^a-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "") || "runtime";
 }
+
+const ATTUNING_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 
 function splitArgs(args: string): string[] {
   return args
@@ -51,15 +55,20 @@ class AdvaitaExtensionController {
   private executorClientId: string | null = null;
   private executionCwd: string | null = null;
   private executingTurnId: string | null = null;
+  private mirroredRemoteAgentTurnId: string | null = null;
   private messageQueue: Promise<void> = Promise.resolve();
   private typingTimeout: NodeJS.Timeout | undefined;
   private terminalInputUnsubscribe: (() => void) | undefined;
+  private attuning = false;
+  private attuningFrameIndex = 0;
+  private attuningTimer: NodeJS.Timeout | undefined;
 
   constructor(private readonly pi: ExtensionAPI) {}
 
   register(): void {
     this.registerFlags();
     this.registerCommands();
+    this.registerShortcuts();
     this.registerEvents();
   }
 
@@ -83,8 +92,35 @@ class AdvaitaExtensionController {
     return false;
   }
 
+  private buildAttuningIndicator(): string | null {
+    if (!this.attuning) {
+      return null;
+    }
+    const frame = ATTUNING_FRAMES[this.attuningFrameIndex % ATTUNING_FRAMES.length] ?? ATTUNING_FRAMES[0];
+    return `${frame} Attuning...`;
+  }
+
+  private setAttuning(next: boolean): void {
+    if (this.attuning === next) {
+      return;
+    }
+    this.attuning = next;
+    if (next) {
+      this.attuningFrameIndex = 0;
+      this.attuningTimer = setInterval(() => {
+        this.attuningFrameIndex = (this.attuningFrameIndex + 1) % ATTUNING_FRAMES.length;
+        this.updateFooterStatus();
+      }, 90);
+    } else if (this.attuningTimer) {
+      clearInterval(this.attuningTimer);
+      this.attuningTimer = undefined;
+    }
+    this.updateFooterStatus();
+  }
+
   private registerFlags(): void {
     this.pi.registerFlag("advaita-url", { description: "Advaita broker websocket URL", type: "string" });
+    this.pi.registerFlag("advaita-share-url", { description: "Advaita shareable broker websocket URL", type: "string" });
     this.pi.registerFlag("advaita-session", { description: "Advaita shared session name", type: "string" });
     this.pi.registerFlag("advaita-runtime", { description: "Advaita runtime identifier", type: "string" });
     this.pi.registerFlag("advaita-display-name", { description: "Advaita display name", type: "string" });
@@ -103,6 +139,7 @@ class AdvaitaExtensionController {
         const [url, sessionName, runtimeId] = parts;
         const config: AdvaitaConnectionConfig = {
           url,
+          shareUrl: url,
           sessionName,
           runtimeId: sanitizeRuntimeId(runtimeId ?? this.defaultRuntimeId()),
           displayName: this.defaultDisplayName(),
@@ -184,12 +221,30 @@ class AdvaitaExtensionController {
           ctx.ui.notify(`Current shared runtime: ${this.currentRuntimeId ?? "none"}`, "info");
           return;
         }
-        const sent = this.broker.send({ type: "client.switch_runtime", runtimeId });
-        if (!sent) {
-          ctx.ui.notify("Broker connection is not ready", "warning");
+        if (this.requestRuntimeSwitch(runtimeId, ctx)) {
+          ctx.ui.notify(`Requested shared runtime switch to ${runtimeId}`, "info");
+        }
+      },
+    });
+
+    this.pi.registerCommand("advaita-invite", {
+      description: "Show join commands for this Advaita session",
+      handler: async (_args, ctx) => {
+        const inviteText = this.buildInviteText();
+        if (!inviteText) {
+          ctx.ui.notify("Advaita is not connected", "warning");
           return;
         }
-        ctx.ui.notify(`Requested shared runtime switch to ${runtimeId}`, "info");
+        await ctx.ui.editor("Advaita Invite", inviteText);
+      },
+    });
+  }
+
+  private registerShortcuts(): void {
+    this.pi.registerShortcut(RUNTIME_PICKER_SHORTCUT, {
+      description: "Open Advaita runtime picker",
+      handler: async (ctx) => {
+        await this.openRuntimePicker(ctx);
       },
     });
   }
@@ -251,8 +306,10 @@ class AdvaitaExtensionController {
         const sent = this.broker?.send({ type: "client.submit", text: event.text }) ?? false;
         if (!sent) {
           ctx.ui.notify("Advaita broker connection is not ready", "warning");
+          this.setAttuning(false);
           return { action: "handled" };
         }
+        this.setAttuning(true);
         return { action: "handled" };
       }
 
@@ -299,6 +356,7 @@ class AdvaitaExtensionController {
     }
     return {
       url,
+      shareUrl: this.stringFlag("advaita-share-url") ?? url,
       sessionName,
       runtimeId: sanitizeRuntimeId(this.stringFlag("advaita-runtime") ?? this.defaultRuntimeId()),
       displayName: this.stringFlag("advaita-display-name") ?? this.defaultDisplayName(),
@@ -319,8 +377,82 @@ class AdvaitaExtensionController {
     return hostname();
   }
 
+  private buildInviteText(): string | null {
+    const config = this.connectionConfig;
+    if (!this.connected || !config) {
+      return null;
+    }
+
+    const simple = `advaita ${config.sessionName}`;
+    const explicit = `advaita join ${config.shareUrl} ${config.sessionName}`;
+    const explicitWithNames = `${explicit} --runtime <your-runtime-id> --display-name \"<your-display-name>\"`;
+
+    return [
+      `Session: ${config.sessionName}`,
+      `Share URL: ${config.shareUrl}`,
+      "",
+      "Simple:",
+      simple,
+      "",
+      "Explicit:",
+      explicit,
+      "",
+      "Explicit with runtime/display placeholders:",
+      explicitWithNames,
+    ].join("\n");
+  }
+
   private resolveClientId(): string {
     return this.connectionConfig?.clientId ?? this.clientId;
+  }
+
+  private requestRuntimeSwitch(runtimeId: string, ctx: ExtensionContext): boolean {
+    if (!this.connected || !this.broker) {
+      ctx.ui.notify("Advaita is not connected", "warning");
+      return false;
+    }
+    const sent = this.broker.send({ type: "client.switch_runtime", runtimeId });
+    if (!sent) {
+      ctx.ui.notify("Broker connection is not ready", "warning");
+      return false;
+    }
+    return true;
+  }
+
+  private async openRuntimePicker(ctx: ExtensionContext): Promise<void> {
+    this.ctx = ctx;
+    if (!this.connected || !this.broker) {
+      ctx.ui.notify("Advaita is not connected", "warning");
+      return;
+    }
+
+    const options = buildRuntimePickerOptions({
+      presence: this.presence,
+      localRuntimeId: this.connectionConfig?.runtimeId ?? this.defaultRuntimeId(),
+      currentRuntimeId: this.currentRuntimeId,
+      executorRuntimeId: this.executorRuntimeId,
+    });
+
+    if (options.length === 0) {
+      ctx.ui.notify("No connected runtimes are available yet.", "warning");
+      return;
+    }
+
+    const selectedRuntimeId = await ctx.ui.custom<string | undefined>(
+      (_tui, theme, _keybindings, done) => new RuntimePickerComponent(theme, options, done),
+      { overlay: true },
+    );
+
+    if (!selectedRuntimeId) {
+      return;
+    }
+    if (selectedRuntimeId === this.currentRuntimeId) {
+      ctx.ui.notify(`Shared runtime already set to ${selectedRuntimeId}`, "info");
+      return;
+    }
+    if (this.requestRuntimeSwitch(selectedRuntimeId, ctx)) {
+      ctx.ui.notify(`Requested shared runtime switch to ${selectedRuntimeId}`, "info");
+    }
   }
 
   private async connect(ctx: ExtensionContext, config: AdvaitaConnectionConfig): Promise<void> {
@@ -362,6 +494,7 @@ class AdvaitaExtensionController {
 
   private disconnect(): void {
     this.setTyping(false);
+    this.setAttuning(false);
     this.executingTurnId = null;
     this.connected = false;
     this.broker?.disconnect();
@@ -373,6 +506,7 @@ class AdvaitaExtensionController {
     this.executorRuntimeId = null;
     this.executorClientId = null;
     this.executionCwd = null;
+    this.mirroredRemoteAgentTurnId = null;
   }
 
   private sendHello(): void {
@@ -388,6 +522,22 @@ class AdvaitaExtensionController {
     });
   }
 
+  private async finalizeMirroredRemoteAgentIfStale(): Promise<void> {
+    if (!this.ctx || !this.mirroredRemoteAgentTurnId) {
+      return;
+    }
+    if (this.activeTurnId && this.activeTurnId === this.mirroredRemoteAgentTurnId) {
+      return;
+    }
+
+    const syntheticAgentEnd: AgentSessionEvent = {
+      type: "agent_end",
+      messages: [],
+    };
+    this.mirroredRemoteAgentTurnId = null;
+    await this.ctx.ui.renderExternalEvent(syntheticAgentEnd);
+  }
+
   private async handleBrokerMessage(message: BrokerMessage): Promise<void> {
     switch (message.type) {
       case "broker.snapshot": {
@@ -399,6 +549,7 @@ class AdvaitaExtensionController {
         this.executionCwd = message.executionCwd;
         this.currentRuntimeId = message.session.metadata.currentRuntimeId;
         await this.syncSnapshot(message.session);
+        await this.finalizeMirroredRemoteAgentIfStale();
         break;
       }
       case "broker.presence": {
@@ -410,16 +561,21 @@ class AdvaitaExtensionController {
       case "broker.session.entries": {
         await this.importCommittedEntries(message.entries);
         this.currentRuntimeId = message.metadata.currentRuntimeId;
+        if (message.entries.some((entry) => entry.type === "custom_message")) {
+          this.setAttuning(false);
+        }
         break;
       }
       case "broker.session.commit": {
         await this.importCommittedEntries(message.commit.entries);
         this.currentRuntimeId = message.metadata.currentRuntimeId;
         this.activeTurnId = message.metadata.activeTurnId;
+        await this.finalizeMirroredRemoteAgentIfStale();
         this.publishModelState();
         break;
       }
       case "broker.turn.assigned": {
+        this.setAttuning(false);
         this.activeTurnId = message.assignment.turnId;
         this.currentRuntimeId = message.assignment.executionRuntimeId;
         this.executorRuntimeId = message.assignment.executionRuntimeId;
@@ -434,19 +590,30 @@ class AdvaitaExtensionController {
         if (!this.connectionConfig || message.stream.clientId === this.connectionConfig.clientId) {
           break;
         }
+        if (message.stream.event.type === "agent_start") {
+          this.mirroredRemoteAgentTurnId = message.stream.turnId;
+        }
         await this.ctx?.ui.renderExternalEvent(message.stream.event);
+        if (message.stream.event.type === "agent_end" && this.mirroredRemoteAgentTurnId === message.stream.turnId) {
+          this.mirroredRemoteAgentTurnId = null;
+        }
         break;
       }
       case "broker.turn.state": {
+        if (this.attuning && (message.activeTurnId !== null || message.queuedCount > 0)) {
+          this.setAttuning(false);
+        }
         this.activeTurnId = message.activeTurnId;
         this.queuedCount = message.queuedCount;
         this.currentRuntimeId = message.currentRuntimeId;
         this.executorRuntimeId = message.executorRuntimeId;
         this.executorClientId = message.executorClientId;
         this.executionCwd = message.executionCwd;
+        await this.finalizeMirroredRemoteAgentIfStale();
         break;
       }
       case "broker.notice": {
+        this.setAttuning(false);
         this.ctx?.ui.notify(message.message, message.level);
         break;
       }
@@ -582,21 +749,22 @@ class AdvaitaExtensionController {
   }
 
   private updateFooterStatus(): void {
-    this.ctx?.ui.setStatus(
-      "advaita",
-      formatFooterStatus({
-        connected: this.connected,
-        sessionName: this.sessionName,
-        runtimeId: this.connectionConfig?.runtimeId ?? this.defaultRuntimeId(),
-        queuedCount: this.queuedCount,
-        currentRuntimeId: this.currentRuntimeId,
-        activeTurnId: this.activeTurnId,
-        executorRuntimeId: this.executorRuntimeId,
-        executorClientId: this.executorClientId,
-        executionCwd: this.executionCwd,
-        presence: this.presence,
-      }),
-    );
+    const state = {
+      connected: this.connected,
+      sessionName: this.sessionName,
+      runtimeId: this.connectionConfig?.runtimeId ?? this.defaultRuntimeId(),
+      queuedCount: this.queuedCount,
+      currentRuntimeId: this.currentRuntimeId,
+      activeTurnId: this.activeTurnId,
+      executorRuntimeId: this.executorRuntimeId,
+      executorClientId: this.executorClientId,
+      executionCwd: this.executionCwd,
+      presence: this.presence,
+      attuningIndicator: this.buildAttuningIndicator(),
+    };
+
+    this.ctx?.ui.setStatus("advaita", formatFooterStatus(state));
+    this.ctx?.ui.setWidget("advaita-runtime", formatRuntimeWidget(state));
   }
 }
 

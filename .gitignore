@@ -6,3 +6,6 @@ coverage/
 .env
 .env.*
 *.tsbuildinfo
+.pack/
+packages/launcher/vendor/
+*.tgz

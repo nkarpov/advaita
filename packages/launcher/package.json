@@ -1,6 +1,6 @@
 {
   "name": "@nickkarpov/advaita",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Advaita launcher and product surface",
   "type": "module",
   "bin": {
@@ -15,7 +15,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "vendor"
   ],
   "keywords": [
     "advaita",
@@ -23,39 +24,12 @@
     "multiplayer",
     "coding-agent"
   ],
-  "bundledDependencies": [
-    "@advaita/broker",
-    "@advaita/pi-package",
-    "@advaita/shared",
-    "@mariozechner/jiti",
-    "@mariozechner/pi-agent-core",
-    "@mariozechner/pi-ai",
-    "@mariozechner/pi-coding-agent",
-    "@mariozechner/pi-tui",
-    "@silvia-odwyer/photon-node",
-    "chalk",
-    "cli-highlight",
-    "diff",
-    "extract-zip",
-    "file-type",
-    "glob",
-    "hosted-git-info",
-    "ignore",
-    "marked",
-    "minimatch",
-    "proper-lockfile",
-    "strip-ansi",
-    "undici",
-    "ws",
-    "yaml",
-    "zod"
-  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/cli.js",
     "test": "vitest run test",
-    "prepack": "npm run build && npm install --prefix . --omit=dev --package-lock=false",
-    "postpack": "node -e \"require('node:fs').rmSync('node_modules', { recursive: true, force: true });\""
+    "prepack": "npm --prefix ../.. run build && node ./scripts/prepare-publish.mjs",
+    "postpack": "node ./scripts/restore-publish.mjs"
   },
   "dependencies": {
     "@advaita/broker": "file:../broker",
