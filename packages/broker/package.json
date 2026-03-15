@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@advaita/shared": "file:../shared",
+    "@mariozechner/pi-ai": "file:../../../pi-mono/packages/ai",
     "@mariozechner/pi-coding-agent": "file:../../../pi-mono/packages/coding-agent",
     "ws": "^8.18.0"
   }

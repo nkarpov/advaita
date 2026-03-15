@@ -61,7 +61,7 @@ async function main(): Promise<void> {
   await server.listen();
   console.log(`Advaita broker listening on ${server.address}`);
   console.log(`Session data: ${args.dataDir}`);
-  console.log(`Router: ${describeTurnIntentRouterEnvironment()}`);
+  console.log(`Router: ${await describeTurnIntentRouterEnvironment()}`);
 
   const shutdown = async () => {
     await server.close();

@@ -6,6 +6,7 @@ import type { BrokerMessage, ClientMessage, RuntimeModelState } from "@advaita/s
 import { ADVAITA_TURN_CUSTOM_TYPE, isAdvaitaTurnEntry } from "@advaita/shared";
 import type { SessionEntry } from "@mariozechner/pi-coding-agent";
 import { AdvaitaBroker, type BrokerConnection } from "../src/broker.js";
+import { HeuristicTurnIntentRouter } from "../src/turn-intent-router.js";
 
 function createModelState(currentModel: RuntimeModelState["currentModel"]): RuntimeModelState {
   return {
@@ -65,9 +66,16 @@ function assistantEntry(text: string, parentId: string | null): SessionEntry {
   } satisfies SessionEntry;
 }
 
+function createBroker(options: ConstructorParameters<typeof AdvaitaBroker>[0]): AdvaitaBroker {
+  return new AdvaitaBroker({
+    ...options,
+    turnIntentRouter: options.turnIntentRouter ?? new HeuristicTurnIntentRouter(),
+  });
+}
+
 describe("AdvaitaBroker", () => {
   it("routes explicit runtime requests, streams live events, and commits canonical entries without changing the sticky runtime", async () => {
-    const broker = new AdvaitaBroker({
+    const broker = createBroker({
       dataDir: mkdtempSync(join(tmpdir(), "advaita-broker-")),
       createTurnId: () => "turn-1",
       now: () => "2026-03-14T00:00:00.000Z",
@@ -182,7 +190,7 @@ describe("AdvaitaBroker", () => {
   });
 
   it("keeps runtime-local sticky model state on the targeted executor only", async () => {
-    const broker = new AdvaitaBroker({
+    const broker = createBroker({
       dataDir: mkdtempSync(join(tmpdir(), "advaita-broker-model-")),
       createTurnId: () => "turn-2",
       now: () => "2026-03-14T00:00:00.000Z",
@@ -252,7 +260,7 @@ describe("AdvaitaBroker", () => {
   });
 
   it("updates the shared default runtime when explicitly switched", async () => {
-    const broker = new AdvaitaBroker({
+    const broker = createBroker({
       dataDir: mkdtempSync(join(tmpdir(), "advaita-broker-switch-")),
       now: () => "2026-03-14T00:00:00.000Z",
     });
@@ -287,7 +295,7 @@ describe("AdvaitaBroker", () => {
   });
 
   it("supports natural-language sticky runtime switches without enqueuing a turn", async () => {
-    const broker = new AdvaitaBroker({
+    const broker = createBroker({
       dataDir: mkdtempSync(join(tmpdir(), "advaita-broker-natural-switch-")),
       now: () => "2026-03-14T00:00:00.000Z",
     });
@@ -324,7 +332,7 @@ describe("AdvaitaBroker", () => {
 
   it("reassigns an active turn after executor disconnect without duplicating the committed user turn", async () => {
     let tick = 0;
-    const broker = new AdvaitaBroker({
+    const broker = createBroker({
       dataDir: mkdtempSync(join(tmpdir(), "advaita-broker-reassign-")),
       createTurnId: () => "turn-3",
       now: () => `2026-03-14T00:00:${String(tick++).padStart(2, "0")}.000Z`,
@@ -381,7 +389,7 @@ describe("AdvaitaBroker", () => {
   });
 
   it("gives late joiners a snapshot with active turn metadata and committed transcript", async () => {
-    const broker = new AdvaitaBroker({
+    const broker = createBroker({
       dataDir: mkdtempSync(join(tmpdir(), "advaita-broker-late-join-")),
       createTurnId: () => "turn-4",
       now: () => "2026-03-14T00:00:00.000Z",

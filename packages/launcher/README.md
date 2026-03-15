@@ -42,17 +42,21 @@ That means the launcher package pre-packs the exact runtime stack it needs, incl
 
 The launcher inherits router configuration from the shell environment and passes it through to the managed local broker.
 
-Example:
+Important: the router now reuses the **local Pi auth/model architecture** on the broker host.
+
+So you do **not** need a separate Advaita router API key anymore.
+If Pi on that machine is already logged in and can see the router model, Advaita can use it.
+
+Typical setup:
 
 ```bash
-export OPENAI_API_KEY=...
 export ADVAITA_ROUTER_MODE=auto
 export ADVAITA_ROUTER_MODEL=gpt-5.1-codex-mini
 advaita doctor
 advaita
 ```
 
-If no router API key is configured, Advaita still works, but routing falls back to heuristics.
+If the selected router model is not available through local Pi auth/config on that machine, Advaita still works and falls back to heuristic routing.
 
 ## Current validation shape
 
