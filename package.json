@@ -7,8 +7,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm --workspace @advaita/shared run build && npm --workspace @advaita/broker run build && npm --workspace @advaita/pi-package run build --if-present && npm --workspace @advaita/launcher run build --if-present && npm --workspace @advaita/integration-tests run build --if-present",
-    "test": "npm --workspace @advaita/shared run build && npm --workspace @advaita/shared run test && npm --workspace @advaita/broker run test && npm --workspace @advaita/pi-package run test --if-present && npm --workspace @advaita/launcher run test --if-present && npm --workspace @advaita/integration-tests run test --if-present",
+    "build": "npm --workspace @advaita/shared run build && npm --workspace @advaita/broker run build && npm --workspace @advaita/pi-package run build --if-present && npm --workspace @nickkarpov/advaita run build --if-present && npm --workspace @advaita/integration-tests run build --if-present",
+    "test": "npm --workspace @advaita/shared run build && npm --workspace @advaita/shared run test && npm --workspace @advaita/broker run test && npm --workspace @advaita/pi-package run test --if-present && npm --workspace @nickkarpov/advaita run test --if-present && npm --workspace @advaita/integration-tests run test --if-present",
     "clean": "find packages -type d -name dist -prune -exec rm -rf {} + ; find packages -type d -name coverage -prune -exec rm -rf {} +"
   },
   "devDependencies": {

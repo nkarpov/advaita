@@ -18,7 +18,7 @@ Advaita should stop feeling like "Pi + a separate broker + local checkout glue" 
 The intended install and launch surface is:
 
 ```bash
-npm install -g @nkarpov/advaita
+npm install -g @nickkarpov/advaita
 advaita
 ```
 
@@ -107,41 +107,32 @@ Thin broker/router implementation used today as the canonical authority and late
 The Advaita Pi package/extension that intercepts shared submit, talks to the broker, keeps local runtime state in sync, and renders live remote execution.
 
 ### `packages/launcher`
-The future **published product surface**: the `advaita` binary, install/bootstrap flow, Pi runtime ownership, and local node/broker lifecycle management.
+The real **published product surface**: the `advaita` binary, install/bootstrap flow, Pi runtime ownership, and current broker lifecycle management that later grows into managed local node behavior.
 
 ### `packages/integration-tests`
 Cross-runtime and cross-machine integration fixtures, replay tests, and multi-client validation.
 
 ## Current phase checkpoint
 
-Phase 5 is complete in Advaita:
+Phase 6 is complete in Advaita.
 
-- `packages/pi-package` now connects real Pi sessions to the broker
-- shared submit interception/import/render/assigned-turn execution exist
-- forked Pi sync/render/continue seams are real
-- the first meaningful interactive path exists
+What now exists:
 
-But the current run path is still **developer-assembled**:
+- `packages/launcher` is the real `@nickkarpov/advaita` package
+- `advaita` is the real product CLI entrypoint
+- Advaita launches the correct forked Pi runtime instead of trusting global `pi`
+- the Advaita Pi package is auto-loaded by the launcher
+- local broker startup/attach is automatic for normal local/hosted use
+- `advaita doctor` and `advaita version` exist
+- `advaita`, `advaita host`, and `advaita join` exist
 
-- it depends on the forked Pi checkout directly
-- it still exposes the broker as a manual process
-- it still exposes the Pi package as a manual launch detail
-- it can fail if an old global `pi` binary is used accidentally
+Phase 6 also chose the current distribution strategy:
 
-That is exactly what the next phases are meant to fix.
+- **bundle a controlled runtime dependency into Advaita**
+
+That means the packed/published `@nickkarpov/advaita` artifact bundles the forked Pi runtime and the Advaita runtime packages it depends on, instead of relying on ambient global installs.
 
 ## Next phases
-
-### Phase 6 — Product launcher & installer
-
-Make Advaita installable and runnable as a single product surface:
-
-- publishable `@nkarpov/advaita`
-- `advaita` command
-- pinned/forked Pi runtime under Advaita control
-- automatic Pi package loading
-- automatic local broker startup/attach
-- `advaita doctor` and bootstrap validation
 
 ### Phase 7 — Managed local node
 
