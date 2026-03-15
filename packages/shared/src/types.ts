@@ -1,6 +1,9 @@
 import type { AgentSessionEvent, SessionEntry, SessionHeader } from "@mariozechner/pi-coding-agent";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export type RuntimeScope = "none" | "turn" | "session";
+export type TurnRoutingAction = "execute" | "switch_runtime";
+export type TurnRoutingSource = "heuristic" | "llm" | "command";
 
 export interface ModelRef {
   provider: string;
@@ -42,23 +45,34 @@ export interface SessionSnapshot {
 }
 
 export interface TurnRoutingIntent {
+  action: TurnRoutingAction;
   requestedRuntimeId: string | null;
+  runtimeScope: RuntimeScope;
   requestedModelQuery: string | null;
+  executionText: string | null;
+  routingSource: TurnRoutingSource;
 }
 
 export interface RuntimeResolution {
   executionRuntimeId: string;
   requestedRuntimeId: string | null;
-  source: "explicit" | "origin" | "current";
+  runtimeScope: RuntimeScope;
+  persistedCurrentRuntimeId: string | null;
+  source: "explicit" | "current" | "origin";
 }
 
-export interface SubmittedTurn extends TurnRoutingIntent {
+export interface SubmittedTurn {
   turnId: string;
   text: string;
   originClientId: string;
   originRuntimeId: string;
   originCwd: string;
   submittedAt: string;
+  requestedRuntimeId: string | null;
+  runtimeScope: RuntimeScope;
+  requestedModelQuery: string | null;
+  executionText: string;
+  routingSource: TurnRoutingSource;
 }
 
 export interface TurnAssignment extends SubmittedTurn {
@@ -86,7 +100,10 @@ export interface AdvaitaTurnEntryData {
   originRuntimeId: string;
   originCwd: string;
   requestedRuntimeId: string | null;
+  runtimeScope: RuntimeScope;
   requestedModelQuery: string | null;
+  executionText: string;
+  routingSource: TurnRoutingSource;
   executionRuntimeId: string;
   executionClientId: string;
   executionCwd: string;

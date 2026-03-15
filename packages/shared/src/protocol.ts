@@ -4,6 +4,7 @@ import type {
   ClientPresence,
   ModelRef,
   RuntimeModelState,
+  RuntimeScope,
   SessionMetadata,
   SessionSnapshot,
   StreamedTurnEvent,
@@ -11,9 +12,12 @@ import type {
   ThinkingLevel,
   TurnAssignment,
   TurnCommit,
+  TurnRoutingSource,
 } from "./types.js";
 
 const thinkingLevelSchema = z.enum(["off", "minimal", "low", "medium", "high", "xhigh"] satisfies [ThinkingLevel, ...ThinkingLevel[]]);
+const runtimeScopeSchema = z.enum(["none", "turn", "session"] satisfies [RuntimeScope, ...RuntimeScope[]]);
+const turnRoutingSourceSchema = z.enum(["heuristic", "llm", "command"] satisfies [TurnRoutingSource, ...TurnRoutingSource[]]);
 
 const modelRefSchema: z.ZodType<ModelRef> = z.object({
   provider: z.string().min(1),
@@ -75,7 +79,10 @@ const submittedTurnSchema: z.ZodType<SubmittedTurn> = z.object({
   originCwd: z.string().min(1),
   submittedAt: z.string().min(1),
   requestedRuntimeId: z.string().nullable(),
+  runtimeScope: runtimeScopeSchema,
   requestedModelQuery: z.string().nullable(),
+  executionText: z.string(),
+  routingSource: turnRoutingSourceSchema,
 });
 
 const turnAssignmentSchema: z.ZodType<TurnAssignment> = z.object({
@@ -86,7 +93,10 @@ const turnAssignmentSchema: z.ZodType<TurnAssignment> = z.object({
   originCwd: z.string().min(1),
   submittedAt: z.string().min(1),
   requestedRuntimeId: z.string().nullable(),
+  runtimeScope: runtimeScopeSchema,
   requestedModelQuery: z.string().nullable(),
+  executionText: z.string(),
+  routingSource: turnRoutingSourceSchema,
   sessionName: z.string().min(1),
   snapshot: sessionSnapshotSchema,
   executionRuntimeId: z.string().min(1),

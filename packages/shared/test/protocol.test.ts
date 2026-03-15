@@ -131,6 +131,34 @@ describe("protocol envelopes", () => {
     expect(parsed).toEqual(message);
   });
 
+  it("serializes turn assignments with sticky-routing metadata", () => {
+    const message: BrokerMessage = {
+      type: "broker.turn.assigned",
+      assignment: {
+        turnId: "turn-1",
+        text: "switch to linux and inspect the repo using gpt 5",
+        originClientId: "client-mac",
+        originRuntimeId: "mac",
+        originCwd: "/Users/nickkarpov/advaita",
+        submittedAt: "2026-03-14T00:00:04.000Z",
+        requestedRuntimeId: "linux",
+        runtimeScope: "session",
+        requestedModelQuery: "gpt 5",
+        executionText: "inspect the repo",
+        routingSource: "llm",
+        sessionName: "demo",
+        snapshot: sessionSnapshot,
+        executionRuntimeId: "linux",
+        executionClientId: "client-linux",
+        executionCwd: "/home/nick/advaita",
+        queuedAt: "2026-03-14T00:00:04.000Z",
+      },
+    };
+
+    const parsed = parseBrokerMessage(serializeProtocolMessage(message).trim());
+    expect(parsed).toEqual(message);
+  });
+
   it("carries live streamed turn events as the primary mirror path", () => {
     const message: BrokerMessage = {
       type: "broker.turn.stream",

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
 import { AdvaitaBrokerWsServer } from "./ws-server.js";
+import { describeTurnIntentRouterEnvironment } from "./turn-intent-router.js";
 
 interface ParsedArgs {
   host: string;
@@ -60,6 +61,7 @@ async function main(): Promise<void> {
   await server.listen();
   console.log(`Advaita broker listening on ${server.address}`);
   console.log(`Session data: ${args.dataDir}`);
+  console.log(`Router: ${describeTurnIntentRouterEnvironment()}`);
 
   const shutdown = async () => {
     await server.close();
