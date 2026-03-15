@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import type { BrokerMessage, ClientMessage } from "@advaita/shared";
 import { parseBrokerMessage, serializeProtocolMessage } from "@advaita/shared";
+import { HeuristicTurnIntentRouter } from "../src/turn-intent-router.js";
 import { AdvaitaBrokerWsServer } from "../src/ws-server.js";
 
 async function waitForOpen(socket: WebSocket): Promise<void> {
@@ -39,6 +40,7 @@ describe("AdvaitaBrokerWsServer", () => {
       port: 0,
       dataDir: `/tmp/advaita-broker-ws-${Date.now()}`,
       createTurnId: () => "turn-ws-1",
+      turnIntentRouter: new HeuristicTurnIntentRouter(),
     });
     await server.listen();
 

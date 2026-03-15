@@ -1,3 +1,16 @@
+import {
+  AuthStorage,
+  ModelRegistry,
+} from "@mariozechner/pi-coding-agent";
+import {
+  completeSimple,
+  StringEnum,
+  Type,
+  type Api,
+  type AssistantMessage,
+  type Model,
+  type Tool,
+} from "@mariozechner/pi-ai";
 import { extractTurnRoutingIntent, type RuntimeModelState, type TurnRoutingIntent } from "@advaita/shared";
 
 export interface TurnIntentRouterRuntime {
@@ -18,40 +31,42 @@ export interface TurnIntentRouter {
   routeTurn(input: TurnIntentRouterInput): Promise<TurnRoutingIntent>;
 }
 
-export interface OpenAITurnIntentRouterOptions {
-  apiKey: string;
-  model: string;
-  baseUrl?: string;
-  fetchImpl?: typeof fetch;
-}
-
 export interface TurnIntentRouterEnvironment {
-  mode: "auto" | "heuristic" | "openai";
-  model: string;
-  baseUrl: string;
-  apiKey?: string;
+  mode: "auto" | "heuristic" | "pi";
+  modelQuery: string;
 }
 
-const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
-const DEFAULT_OPENAI_ROUTER_MODEL = "gpt-5.1-codex-mini";
+export interface TurnIntentRouterInspection {
+  status: "ok" | "warn";
+  detail: string;
+  modelQuery: string;
+  selectedModelId?: string;
+}
 
-const TURN_ROUTING_RESPONSE_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["action", "requestedRuntimeId", "runtimeScope", "requestedModelQuery", "executionText", "routingSource"],
-  properties: {
-    action: { type: "string", enum: ["execute", "switch_runtime"] },
-    requestedRuntimeId: { type: ["string", "null"] },
-    runtimeScope: { type: "string", enum: ["none", "turn", "session"] },
-    requestedModelQuery: { type: ["string", "null"] },
-    executionText: { type: ["string", "null"] },
-    routingSource: { type: "string", enum: ["llm"] },
-  },
-} as const;
+export interface RouterAuthStorageLike {
+  reload(): void;
+}
+
+export interface RouterModelRegistryLike {
+  refresh(): void;
+  getAvailable(): Model<Api>[];
+  getApiKey(model: Model<Api>): Promise<string | undefined>;
+  getError?(): string | undefined;
+}
+
+export interface PiTurnIntentRouterOptions {
+  modelQuery: string;
+  authStorage?: RouterAuthStorageLike;
+  modelRegistry?: RouterModelRegistryLike;
+  completeSimpleImpl?: typeof completeSimple;
+}
+
+const DEFAULT_ROUTER_MODEL_QUERY = "gpt-5.1-codex-mini";
 
 const ROUTER_SYSTEM_PROMPT = [
   "You are Advaita's routing classifier for a multiplayer coding agent.",
-  "Return only JSON matching the requested schema.",
+  "Classify the user's turn by calling the route_turn tool exactly once.",
+  "If your model absolutely cannot call tools, output only JSON with the same fields.",
   "",
   "Decide whether the user wants a normal executed turn or a sticky shared runtime switch.",
   "Rules:",
@@ -69,49 +84,21 @@ const ROUTER_SYSTEM_PROMPT = [
   "- Always set routingSource to 'llm'.",
 ].join("\n");
 
+const ROUTER_TOOL: Tool = {
+  name: "route_turn",
+  description: "Return the classified routing intent for the user turn. Call this tool exactly once instead of answering in prose.",
+  parameters: Type.Object({
+    action: StringEnum(["execute", "switch_runtime"] as const),
+    requestedRuntimeId: Type.Union([Type.String(), Type.Null()]),
+    runtimeScope: StringEnum(["none", "turn", "session"] as const),
+    requestedModelQuery: Type.Union([Type.String(), Type.Null()]),
+    executionText: Type.Union([Type.String(), Type.Null()]),
+    routingSource: Type.Literal("llm"),
+  }),
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function resolveResponsesUrl(baseUrl: string): string {
-  const normalized = baseUrl.replace(/\/+$/, "");
-  if (normalized.endsWith("/responses")) return normalized;
-  if (normalized.endsWith("/v1")) return `${normalized}/responses`;
-  return `${normalized}/v1/responses`;
-}
-
-function stripMarkdownCodeFence(text: string): string {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]+?)\s*```$/i);
-  return fenced?.[1]?.trim() ?? trimmed;
-}
-
-function extractResponseText(payload: unknown): string {
-  if (!isRecord(payload)) {
-    throw new Error("OpenAI router response was not an object");
-  }
-
-  const direct = payload.output_text;
-  if (typeof direct === "string" && direct.trim().length > 0) {
-    return direct;
-  }
-
-  const output = payload.output;
-  if (!Array.isArray(output)) {
-    throw new Error("OpenAI router response did not include output_text");
-  }
-
-  for (const item of output) {
-    if (!isRecord(item) || !Array.isArray(item.content)) continue;
-    for (const part of item.content) {
-      if (!isRecord(part)) continue;
-      if (typeof part.text === "string" && part.text.trim().length > 0) {
-        return part.text;
-      }
-    }
-  }
-
-  throw new Error("OpenAI router response did not include a text payload");
 }
 
 function formatModelRef(model: RuntimeModelState["currentModel"]): string | null {
@@ -131,6 +118,12 @@ function coerceString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function stripMarkdownCodeFence(text: string): string {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]+?)\s*```$/i);
+  return fenced?.[1]?.trim() ?? trimmed;
 }
 
 function validateRouterPayload(payload: unknown, runtimes: TurnIntentRouterRuntime[]): TurnRoutingIntent {
@@ -247,6 +240,114 @@ function buildRouterPrompt(input: TurnIntentRouterInput): string {
   );
 }
 
+function normalize(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function compact(text: string): string {
+  return normalize(text).replace(/\s+/g, "");
+}
+
+function scoreAlias(query: string, alias: string): number {
+  const normalizedQuery = normalize(query);
+  const normalizedAlias = normalize(alias);
+  const compactQuery = compact(query);
+  const compactAlias = compact(alias);
+  if (!normalizedQuery || !normalizedAlias) return 0;
+
+  if (normalizedQuery === normalizedAlias) return 1000 - normalizedAlias.length;
+  if (compactQuery === compactAlias) return 975 - compactAlias.length;
+  if (normalizedAlias.startsWith(normalizedQuery)) return 900 - normalizedAlias.length;
+  if (compactAlias.startsWith(compactQuery)) return 875 - compactAlias.length;
+  if (normalizedQuery.includes(normalizedAlias)) return 800 - normalizedAlias.length;
+
+  const queryTokens = new Set(normalizedQuery.split(" "));
+  const aliasTokens = normalizedAlias.split(" ");
+  const overlap = aliasTokens.filter((token) => queryTokens.has(token)).length;
+  if (overlap === 0) return 0;
+
+  const allAliasTokensMatch = aliasTokens.every((token) => queryTokens.has(token));
+  return (allAliasTokensMatch ? 700 : 500) + overlap * 20 - normalizedAlias.length;
+}
+
+function aliasesForModel(model: Pick<Model<Api>, "provider" | "id" | "name">): string[] {
+  const aliases = new Set<string>();
+  aliases.add(model.id);
+  aliases.add(`${model.provider}/${model.id}`);
+  aliases.add(`${model.provider} ${model.id}`);
+  if (model.name) {
+    aliases.add(model.name);
+    aliases.add(`${model.provider} ${model.name}`);
+  }
+  return Array.from(aliases);
+}
+
+function resolveModelQuery<TModel extends Pick<Model<Api>, "provider" | "id" | "name">>(query: string, models: TModel[]): TModel | undefined {
+  let best: { model: TModel; score: number } | null = null;
+
+  for (const model of models) {
+    const bestAliasScore = Math.max(...aliasesForModel(model).map((alias) => scoreAlias(query, alias)), 0);
+    if (bestAliasScore <= 0) continue;
+    if (!best || bestAliasScore > best.score) {
+      best = { model, score: bestAliasScore };
+    }
+  }
+
+  return best?.model;
+}
+
+function createDefaultRouterResources(): { authStorage: RouterAuthStorageLike; modelRegistry: RouterModelRegistryLike } {
+  const authStorage = AuthStorage.create();
+  const modelRegistry = new ModelRegistry(authStorage);
+  return { authStorage, modelRegistry };
+}
+
+function extractPayloadFromAssistantMessage(message: AssistantMessage): unknown {
+  for (const block of message.content) {
+    if (block.type === "toolCall" && block.name === ROUTER_TOOL.name) {
+      return block.arguments;
+    }
+  }
+
+  const textBlocks = message.content
+    .filter((block): block is Extract<AssistantMessage["content"][number], { type: "text" }> => block.type === "text")
+    .map((block) => block.text)
+    .join("\n")
+    .trim();
+
+  if (textBlocks.length > 0) {
+    return JSON.parse(stripMarkdownCodeFence(textBlocks));
+  }
+
+  throw new Error("Router model did not return a route_turn tool call or JSON payload");
+}
+
+async function resolveRouterModel(
+  modelQuery: string,
+  authStorage: RouterAuthStorageLike,
+  modelRegistry: RouterModelRegistryLike,
+): Promise<{ model: Model<Api>; apiKey: string }> {
+  authStorage.reload();
+  modelRegistry.refresh();
+
+  const availableModels = modelRegistry.getAvailable();
+  const model = resolveModelQuery(modelQuery, availableModels);
+  if (!model) {
+    throw new Error(`Router model query "${modelQuery}" is not available via local Pi auth/model config`);
+  }
+
+  const apiKey = await modelRegistry.getApiKey(model);
+  if (!apiKey) {
+    throw new Error(`Router model ${model.provider}/${model.id} is configured but no Pi API key/oauth token is available`);
+  }
+
+  return { model, apiKey };
+}
+
 export class HeuristicTurnIntentRouter implements TurnIntentRouter {
   async routeTurn(input: TurnIntentRouterInput): Promise<TurnRoutingIntent> {
     return extractTurnRoutingIntent(
@@ -256,55 +357,45 @@ export class HeuristicTurnIntentRouter implements TurnIntentRouter {
   }
 }
 
-export class OpenAITurnIntentRouter implements TurnIntentRouter {
-  private readonly fetchImpl: typeof fetch;
-  private readonly responsesUrl: string;
+export class PiTurnIntentRouter implements TurnIntentRouter {
+  private readonly authStorage: RouterAuthStorageLike;
+  private readonly modelRegistry: RouterModelRegistryLike;
+  private readonly completeSimpleImpl: typeof completeSimple;
 
-  constructor(private readonly options: OpenAITurnIntentRouterOptions) {
-    this.fetchImpl = options.fetchImpl ?? fetch;
-    this.responsesUrl = resolveResponsesUrl(options.baseUrl ?? DEFAULT_OPENAI_BASE_URL);
+  constructor(private readonly options: PiTurnIntentRouterOptions) {
+    const defaults = createDefaultRouterResources();
+    this.authStorage = options.authStorage ?? defaults.authStorage;
+    this.modelRegistry = options.modelRegistry ?? defaults.modelRegistry;
+    this.completeSimpleImpl = options.completeSimpleImpl ?? completeSimple;
   }
 
   async routeTurn(input: TurnIntentRouterInput): Promise<TurnRoutingIntent> {
-    const response = await this.fetchImpl(this.responsesUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.options.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: this.options.model,
-        store: false,
-        temperature: 0,
-        max_output_tokens: 300,
-        instructions: ROUTER_SYSTEM_PROMPT,
-        input: [
+    const { model, apiKey } = await resolveRouterModel(this.options.modelQuery, this.authStorage, this.modelRegistry);
+
+    const response = await this.completeSimpleImpl(
+      model,
+      {
+        systemPrompt: ROUTER_SYSTEM_PROMPT,
+        messages: [
           {
             role: "user",
-            content: [{ type: "input_text", text: buildRouterPrompt(input) }],
+            content: buildRouterPrompt(input),
+            timestamp: Date.now(),
           },
         ],
-        text: {
-          verbosity: "low",
-          format: {
-            type: "json_schema",
-            name: "advaita_turn_routing",
-            strict: true,
-            schema: TURN_ROUTING_RESPONSE_SCHEMA,
-          },
-        },
-      }),
-    });
+        tools: [ROUTER_TOOL],
+      },
+      {
+        apiKey,
+        maxTokens: 300,
+      },
+    );
 
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(`OpenAI router request failed (${response.status}): ${detail.trim() || response.statusText}`);
+    if (response.stopReason === "error" || response.stopReason === "aborted") {
+      throw new Error(response.errorMessage || `Router model ${model.provider}/${model.id} returned ${response.stopReason}`);
     }
 
-    const payload = await response.json();
-    const text = stripMarkdownCodeFence(extractResponseText(payload));
-    const parsed = JSON.parse(text) as unknown;
-    return validateRouterPayload(parsed, input.runtimes);
+    return validateRouterPayload(extractPayloadFromAssistantMessage(response), input.runtimes);
   }
 }
 
@@ -332,30 +423,59 @@ export class FallbackTurnIntentRouter implements TurnIntentRouter {
 
 export function resolveTurnIntentRouterEnvironment(env: NodeJS.ProcessEnv = process.env): TurnIntentRouterEnvironment {
   const rawMode = env.ADVAITA_ROUTER_MODE?.trim().toLowerCase();
-  const mode = rawMode === "heuristic" || rawMode === "openai" ? rawMode : "auto";
+  const mode = rawMode === "heuristic" ? "heuristic" : rawMode === "pi" || rawMode === "openai" ? "pi" : "auto";
   return {
     mode,
-    model: env.ADVAITA_ROUTER_MODEL?.trim() || DEFAULT_OPENAI_ROUTER_MODEL,
-    baseUrl: env.ADVAITA_ROUTER_BASE_URL?.trim() || env.OPENAI_BASE_URL?.trim() || DEFAULT_OPENAI_BASE_URL,
-    apiKey: env.ADVAITA_ROUTER_OPENAI_API_KEY?.trim() || env.OPENAI_API_KEY?.trim() || undefined,
+    modelQuery: env.ADVAITA_ROUTER_MODEL_QUERY?.trim() || env.ADVAITA_ROUTER_MODEL?.trim() || DEFAULT_ROUTER_MODEL_QUERY,
   };
 }
 
-export function describeTurnIntentRouterEnvironment(env: NodeJS.ProcessEnv = process.env): string {
+export async function inspectTurnIntentRouterEnvironment(
+  env: NodeJS.ProcessEnv = process.env,
+  options?: {
+    authStorage?: RouterAuthStorageLike;
+    modelRegistry?: RouterModelRegistryLike;
+  },
+): Promise<TurnIntentRouterInspection> {
   const config = resolveTurnIntentRouterEnvironment(env);
   if (config.mode === "heuristic") {
-    return "heuristic";
+    return {
+      status: "ok",
+      detail: "heuristic (forced by ADVAITA_ROUTER_MODE=heuristic)",
+      modelQuery: config.modelQuery,
+    };
   }
-  if (!config.apiKey) {
-    return `heuristic (set OPENAI_API_KEY or ADVAITA_ROUTER_OPENAI_API_KEY to enable ${config.model})`;
+
+  const defaults = createDefaultRouterResources();
+  const authStorage = options?.authStorage ?? defaults.authStorage;
+  const modelRegistry = options?.modelRegistry ?? defaults.modelRegistry;
+
+  try {
+    const { model } = await resolveRouterModel(config.modelQuery, authStorage, modelRegistry);
+    return {
+      status: "ok",
+      detail: `pi:${model.provider}/${model.id} with heuristic fallback`,
+      modelQuery: config.modelQuery,
+      selectedModelId: `${model.provider}/${model.id}`,
+    };
+  } catch (error) {
+    const registryError = modelRegistry.getError?.();
+    const baseMessage = error instanceof Error ? error.message : String(error);
+    return {
+      status: "warn",
+      detail: registryError
+        ? `heuristic fallback (${baseMessage}; models.json warning: ${registryError})`
+        : `heuristic fallback (${baseMessage})`,
+      modelQuery: config.modelQuery,
+    };
   }
-  return `openai:${config.model} with heuristic fallback`;
 }
 
-export function createTurnIntentRouter(
-  env: NodeJS.ProcessEnv = process.env,
-  fetchImpl?: typeof fetch,
-): TurnIntentRouter {
+export async function describeTurnIntentRouterEnvironment(env: NodeJS.ProcessEnv = process.env): Promise<string> {
+  return (await inspectTurnIntentRouterEnvironment(env)).detail;
+}
+
+export function createTurnIntentRouter(env: NodeJS.ProcessEnv = process.env): TurnIntentRouter {
   const config = resolveTurnIntentRouterEnvironment(env);
   const heuristic = new HeuristicTurnIntentRouter();
 
@@ -363,20 +483,8 @@ export function createTurnIntentRouter(
     return heuristic;
   }
 
-  if (!config.apiKey) {
-    return heuristic;
-  }
-
-  const openai = new OpenAITurnIntentRouter({
-    apiKey: config.apiKey,
-    model: config.model,
-    baseUrl: config.baseUrl,
-    fetchImpl,
-  });
-
-  if (config.mode === "openai") {
-    return new FallbackTurnIntentRouter(openai, heuristic);
-  }
-
-  return new FallbackTurnIntentRouter(openai, heuristic);
+  return new FallbackTurnIntentRouter(
+    new PiTurnIntentRouter({ modelQuery: config.modelQuery }),
+    heuristic,
+  );
 }

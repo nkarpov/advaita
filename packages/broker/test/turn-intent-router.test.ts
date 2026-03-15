@@ -1,10 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import type { Model } from "@mariozechner/pi-ai";
 import type { RuntimeModelState } from "@advaita/shared";
 import {
   FallbackTurnIntentRouter,
   HeuristicTurnIntentRouter,
-  OpenAITurnIntentRouter,
+  PiTurnIntentRouter,
   createTurnIntentRouter,
+  inspectTurnIntentRouterEnvironment,
+  type RouterAuthStorageLike,
+  type RouterModelRegistryLike,
 } from "../src/turn-intent-router.js";
 
 function createModelState(currentModel: RuntimeModelState["currentModel"]): RuntimeModelState {
@@ -38,6 +42,46 @@ const routerInput = {
   ],
 };
 
+const routerModel: Model<any> = {
+  id: "gpt-5.1-codex-mini",
+  name: "GPT-5.1 Codex mini",
+  api: "openai-responses",
+  provider: "openai",
+  baseUrl: "https://api.openai.com/v1",
+  reasoning: true,
+  input: ["text"],
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  contextWindow: 1,
+  maxTokens: 1,
+};
+
+function createRouterResources(availableModels: Model<any>[]): {
+  authStorage: RouterAuthStorageLike;
+  modelRegistry: RouterModelRegistryLike;
+} {
+  return {
+    authStorage: {
+      reload() {
+        // noop
+      },
+    },
+    modelRegistry: {
+      refresh() {
+        // noop
+      },
+      getAvailable() {
+        return availableModels;
+      },
+      async getApiKey() {
+        return "test-key";
+      },
+      getError() {
+        return undefined;
+      },
+    },
+  };
+}
+
 describe("turn intent routers", () => {
   it("heuristic router distinguishes sticky switches from one-turn routing", async () => {
     const router = new HeuristicTurnIntentRouter();
@@ -51,25 +95,43 @@ describe("turn intent routers", () => {
     });
   });
 
-  it("parses structured openai router output", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        output_text: JSON.stringify({
-          action: "execute",
-          requestedRuntimeId: "linux",
-          runtimeScope: "session",
-          requestedModelQuery: "gpt 5",
-          executionText: "inspect the build logs",
-          routingSource: "llm",
-        }),
+  it("uses Pi model/auth plumbing to classify routing with a tool call", async () => {
+    const { authStorage, modelRegistry } = createRouterResources([routerModel]);
+    const router = new PiTurnIntentRouter({
+      modelQuery: "gpt-5.1-codex-mini",
+      authStorage,
+      modelRegistry,
+      completeSimpleImpl: async () => ({
+        role: "assistant",
+        api: "openai-responses",
+        provider: "openai",
+        model: "gpt-5.1-codex-mini",
+        stopReason: "toolUse",
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        timestamp: 1,
+        content: [
+          {
+            type: "toolCall",
+            id: "tool-1",
+            name: "route_turn",
+            arguments: {
+              action: "execute",
+              requestedRuntimeId: "linux",
+              runtimeScope: "session",
+              requestedModelQuery: "gpt 5",
+              executionText: "inspect the build logs",
+              routingSource: "llm",
+            },
+          },
+        ],
       }),
-    } as Response);
-
-    const router = new OpenAITurnIntentRouter({
-      apiKey: "test-key",
-      model: "gpt-5.1-codex-mini",
-      fetchImpl,
     });
 
     await expect(router.routeTurn(routerInput)).resolves.toEqual({
@@ -82,19 +144,31 @@ describe("turn intent routers", () => {
     });
   });
 
-  it("falls back to heuristic routing when the llm router fails", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue({
-      ok: false,
-      status: 500,
-      statusText: "boom",
-      text: async () => "router exploded",
-    } as Response);
-
+  it("falls back to heuristic routing when the pi-backed router fails", async () => {
+    const { authStorage, modelRegistry } = createRouterResources([routerModel]);
     const router = new FallbackTurnIntentRouter(
-      new OpenAITurnIntentRouter({
-        apiKey: "test-key",
-        model: "gpt-5.1-codex-mini",
-        fetchImpl,
+      new PiTurnIntentRouter({
+        modelQuery: "gpt-5.1-codex-mini",
+        authStorage,
+        modelRegistry,
+        completeSimpleImpl: async () => ({
+          role: "assistant",
+          api: "openai-responses",
+          provider: "openai",
+          model: "gpt-5.1-codex-mini",
+          stopReason: "error",
+          errorMessage: "router exploded",
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          timestamp: 1,
+          content: [],
+        }),
       }),
       new HeuristicTurnIntentRouter(),
     );
@@ -109,9 +183,23 @@ describe("turn intent routers", () => {
     });
   });
 
-  it("uses heuristic routing automatically when no router api key is configured", async () => {
+  it("inspects router availability through local Pi model/auth state", async () => {
+    const inspection = await inspectTurnIntentRouterEnvironment(
+      {
+        ADVAITA_ROUTER_MODE: "auto",
+        ADVAITA_ROUTER_MODEL: "gpt-5.1-codex-mini",
+      },
+      createRouterResources([routerModel]),
+    );
+
+    expect(inspection.status).toBe("ok");
+    expect(inspection.selectedModelId).toBe("openai/gpt-5.1-codex-mini");
+    expect(inspection.detail).toContain("pi:openai/gpt-5.1-codex-mini");
+  });
+
+  it("uses heuristic routing automatically when no Pi-authenticated router model is available", async () => {
     const router = createTurnIntentRouter({
-      ADVAITA_ROUTER_MODE: "auto",
+      ADVAITA_ROUTER_MODE: "heuristic",
       ADVAITA_ROUTER_MODEL: "gpt-5.1-codex-mini",
     });
 
