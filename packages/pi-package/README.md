@@ -2,20 +2,25 @@
 
 Advaita Pi package/extension.
 
-## Important positioning
+## Positioning after Phase 6
 
-This package is the real multiplayer Pi client layer, but it is **not** meant to be the long-term end-user entrypoint.
+This package is the real multiplayer Pi client layer, but after Phase 6 it is no longer the primary end-user entrypoint.
 
-Today it is still launched directly during development.
-
-The intended product direction is:
+End users should go through:
 
 ```bash
-npm install -g @nkarpov/advaita
+npm install -g @nickkarpov/advaita
 advaita
 ```
 
-So Phase 6 should make this package mostly an internal implementation detail behind the Advaita launcher.
+The launcher now owns:
+
+- the `advaita` command
+- the forked Pi runtime it launches
+- auto-loading this package
+- local broker startup/attach for current single-node use
+
+This package remains the right place for multiplayer Pi client behavior itself.
 
 ## Responsibilities
 
@@ -35,17 +40,9 @@ So Phase 6 should make this package mostly an internal implementation detail beh
 - `/route-debug`
 - `/runtime <runtimeId>`
 
-## Current development bootstrap
+## Current low-level development bootstrap
 
-Start the broker:
-
-```bash
-cd /Users/nickkarpov/advaita
-npm --workspace @advaita/broker run build
-npm --workspace @advaita/broker run start -- --host 127.0.0.1 --port 7171 --data-dir /tmp/advaita-broker
-```
-
-Then launch the **forked Pi runtime** with the package:
+If you are working directly on the Pi package/client layer, you can still launch it with the forked Pi runtime manually:
 
 ```bash
 cd /Users/nickkarpov/pi-mono
@@ -56,11 +53,11 @@ node packages/coding-agent/dist/cli.js \
   --advaita-runtime mac
 ```
 
-Do **not** use an older globally installed `pi` binary here. Advaita Phase 5 depends on fork-only extension APIs such as `replaceSessionContents()`, `importSessionEntries()`, and `continueSession()`.
+Do **not** use an older globally installed `pi` binary here. Advaita depends on fork-only extension APIs such as `replaceSessionContents()`, `importSessionEntries()`, and `continueSession()`.
 
 ## Current limitations
 
 - shared image turns are not supported yet
 - `/new`, `/resume`, `/tree`, and `/fork` are blocked while connected
 - footer/status is implemented via Pi footer status text first; richer shared widgets can come later
-- the current launch flow is still development-oriented and will be hidden behind the launcher in Phase 6
+- richer shared-session command semantics still continue in later phases

@@ -12,7 +12,7 @@ Advaita should stop feeling like a hand-assembled stack of:
 The product surface should become:
 
 ```bash
-npm install -g @nkarpov/advaita
+npm install -g @nickkarpov/advaita
 advaita
 ```
 
@@ -68,7 +68,7 @@ Only the following should live in the Pi fork:
 
 ---
 
-## Current state after Phase 5
+## Current state after Phase 6
 
 What is already real:
 
@@ -76,15 +76,17 @@ What is already real:
 - `@advaita/broker`
 - `@advaita/pi-package`
 - the forked Pi sync/render/continue APIs in `/Users/nickkarpov/pi-mono`
+- `@nickkarpov/advaita` as the real launcher/product package in `packages/launcher`
+- the `advaita` CLI with local broker auto-start/attach and bundled forked Pi runtime launch
+- `advaita doctor`, `advaita version`, `advaita`, `advaita host`, and `advaita join`
 
-What is still not productized:
+What is still ahead:
 
-- users still have to think about the broker as a separate thing
-- users still have to think about the Pi package as a separate thing
-- users can still accidentally run the wrong `pi` binary
-- the current manual path still feels like a development harness, not a product install
+- the local broker is not yet a managed long-lived local node/service
+- replicated authority/failover is not built yet
+- shared command semantics beyond the current basics still continue in later phases
 
-So the next work is explicitly about **productization first**, then **managed local node lifecycle**, then **replicated authority/failover**.
+So the next work is now explicitly about **managed local node lifecycle first**, then **replicated authority/failover**, then the additional shared-session semantics and polish behind that.
 
 ---
 
@@ -98,7 +100,7 @@ So the next work is explicitly about **productization first**, then **managed lo
 │  ├─ broker/            # routing/order/fanout/session authority implementation
 │  ├─ shared/            # protocol, routing parsers, shared types
 │  ├─ pi-package/        # Advaita Pi extension/package
-│  ├─ launcher/          # future published @nkarpov/advaita entrypoint
+│  ├─ launcher/          # published @nickkarpov/advaita entrypoint
 │  └─ integration-tests/ # multi-runtime tests and fixtures
 └─ notes/
    ├─ pi-fork-api-gap.md
@@ -170,34 +172,34 @@ Turn Advaita into a single installable product surface.
 
 ### Packaging and runtime ownership
 
-- [ ] Make `packages/launcher` the real publishable `@nkarpov/advaita` package
-- [ ] Ship an `advaita` binary as the primary user entrypoint
-- [ ] Stop depending on an ambient global `pi` binary in `PATH`
-- [ ] Decide and implement the fork distribution strategy for product installs:
+- [x] Make `packages/launcher` the real publishable `@nickkarpov/advaita` package
+- [x] Ship an `advaita` binary as the primary user entrypoint
+- [x] Stop depending on an ambient global `pi` binary in `PATH`
+- [x] Decide and implement the fork distribution strategy for product installs:
   - [ ] publish forked Pi runtime packages under our scope/release line, or
-  - [ ] bundle a controlled runtime dependency into Advaita
-- [ ] Ensure Advaita always launches the exact forked Pi runtime version it requires
-- [ ] Make `packages/pi-package` an implementation detail for end users instead of a manual launch detail
+  - [x] bundle a controlled runtime dependency into Advaita
+- [x] Ensure Advaita always launches the exact forked Pi runtime version it requires
+- [x] Make `packages/pi-package` an implementation detail for end users instead of a manual launch detail
 
 ### Launcher behavior
 
-- [ ] Launch the correct Pi runtime programmatically or as a managed child process
-- [ ] Auto-load the Advaita Pi package/extension
-- [ ] Auto-start or auto-attach a local broker/node instead of asking users to run one manually
-- [ ] Add `advaita doctor` to detect bad runtime/version/path/config states
-- [ ] Add `advaita version` / install diagnostics
-- [ ] Define the initial product UX for:
-  - [ ] `advaita`
-  - [ ] `advaita host`
-  - [ ] `advaita join`
-  - [ ] `advaita doctor`
+- [x] Launch the correct Pi runtime programmatically or as a managed child process
+- [x] Auto-load the Advaita Pi package/extension
+- [x] Auto-start or auto-attach a local broker/node instead of asking users to run one manually
+- [x] Add `advaita doctor` to detect bad runtime/version/path/config states
+- [x] Add `advaita version` / install diagnostics
+- [x] Define the initial product UX for:
+  - [x] `advaita`
+  - [x] `advaita host`
+  - [x] `advaita join`
+  - [x] `advaita doctor`
 
 ### Phase 6 acceptance signal
 
-- [ ] A fresh machine can install Advaita and launch a working local session with a single user-facing command
-- [ ] No manual broker startup is required
-- [ ] No manual `pi -e ...` invocation is required
-- [ ] Running the wrong global `pi` binary is no longer a failure mode for normal users
+- [x] A fresh machine can install Advaita and launch a working local session with a single user-facing command
+- [x] No manual broker startup is required
+- [x] No manual `pi -e ...` invocation is required
+- [x] Running the wrong global `pi` binary is no longer a failure mode for normal users
 
 ## Phase 7 — Managed local Advaita node
 
@@ -316,7 +318,7 @@ These are still important, but they now sit behind the product/node work instead
 
 Advaita is ready as a real product when all of the following are true:
 
-- [ ] A user can run `npm install -g @nkarpov/advaita` and then `advaita`
+- [ ] A user can run `npm install -g @nickkarpov/advaita` and then `advaita`
 - [ ] Users do not manually manage a broker process
 - [ ] Users do not manually invoke `pi -e ...`
 - [ ] Advaita always uses the correct forked Pi runtime it was built against

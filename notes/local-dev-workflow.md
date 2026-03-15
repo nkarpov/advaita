@@ -8,34 +8,34 @@ Any Pi dependency used by Advaita comes from **our fork** at:
 
 Advaita does **not** treat upstream Pi as its active dependency source.
 
-## Current state vs target product state
+## Current state vs product state
 
-### Current development state
+### Product state reached in Phase 6
 
-Right now Advaita still uses a **development-first** workflow:
-
-- sibling local checkouts
-- local file/workspace dependencies on the forked Pi packages
-- direct invocation of the forked Pi CLI during manual testing
-
-That is still the correct workflow while we are developing Phases 5–7.
-
-### Target product state
-
-The intended user-facing product surface is:
+Advaita now has a real launcher/install surface:
 
 ```bash
-npm install -g @nkarpov/advaita
+npm install -g @nickkarpov/advaita
 advaita
 ```
 
-That means the future product must:
+Phase 6 implemented that product surface in `packages/launcher` and chose the **bundle a controlled runtime dependency into Advaita** strategy.
 
-- own the exact forked Pi runtime version it needs
-- stop depending on whatever global `pi` binary happens to be installed
-- hide the Advaita Pi package and broker as implementation details
+That means the launcher package owns:
 
-Until that launcher/install work lands, continue using the sibling-checkout workflow below.
+- the `advaita` CLI
+- the forked Pi runtime it launches
+- the Advaita Pi package wiring
+- local broker auto-start/auto-attach for current single-node use
+
+### Ongoing development state
+
+Even though the product launcher now exists, day-to-day development still uses sibling local checkouts:
+
+- `/Users/nickkarpov/pi-mono`
+- `/Users/nickkarpov/advaita`
+
+That remains the right workflow while we continue evolving Phases 7+.
 
 ## Remotes policy
 
@@ -86,11 +86,12 @@ When Advaita code needs Pi packages, it should consume the forked `@mariozechner
 Typical examples:
 
 - `@advaita/pi-package` depends on forked `@mariozechner/pi-coding-agent`
+- the launcher bundles the forked `@mariozechner/pi-coding-agent` into the product tarball during pack/publish preparation
 - packages using lower-level APIs may also depend on forked `@mariozechner/pi-agent-core`, `@mariozechner/pi-ai`, or `@mariozechner/pi-tui`
 
-## Local install workflow
+## Local install workflow for development
 
-When a package in `/Users/nickkarpov/advaita` is ready to import Pi code, install the forked packages from the sibling checkout.
+When a package in `/Users/nickkarpov/advaita` is ready to import Pi code directly, install the forked packages from the sibling checkout.
 
 Example:
 
@@ -105,27 +106,38 @@ npm install --workspace @advaita/pi-package \
 
 That makes the dependency source explicit: Advaita is using our fork, not the public upstream release line.
 
+## Useful developer run paths
+
+### Product-path launcher validation
+
+```bash
+cd /Users/nickkarpov/advaita
+npm run build
+node packages/launcher/dist/cli.js doctor
+node packages/launcher/dist/cli.js demo -- --help
+```
+
+### Low-level Pi-package validation
+
+For lower-level client/extension work, you can still use the forked runtime directly:
+
+```bash
+cd /Users/nickkarpov/pi-mono
+node packages/coding-agent/dist/cli.js \
+  -e /Users/nickkarpov/advaita/packages/pi-package \
+  --advaita-url ws://127.0.0.1:7171 \
+  --advaita-session demo
+```
+
 ## Working loop
 
 1. make generic Pi changes in `/Users/nickkarpov/pi-mono`
 2. build the needed Pi packages in the fork
 3. consume those forked packages from `/Users/nickkarpov/advaita`
 4. implement Advaita behavior against the forked APIs
-5. push Pi work to `origin` in `pi-mono`
-6. push Advaita work to `origin` in `advaita`
-
-## Manual testing rule today
-
-For current manual testing, do **not** trust an ambient global `pi` binary.
-
-Use the forked runtime explicitly:
-
-```bash
-cd /Users/nickkarpov/pi-mono
-node packages/coding-agent/dist/cli.js ...
-```
-
-This avoids accidentally launching an older installed Pi build that lacks the fork-only Advaita APIs.
+5. validate the product path through `packages/launcher`
+6. push Pi work to `origin` in `pi-mono`
+7. push Advaita work to `origin` in `advaita`
 
 ## Important note
 

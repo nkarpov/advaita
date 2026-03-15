@@ -1,6 +1,87 @@
 {
-  "name": "@advaita/launcher",
-  "private": true,
-  "version": "0.0.0",
-  "description": "Launcher/bootstrap surface for Advaita V2"
+  "name": "@nickkarpov/advaita",
+  "version": "0.1.0",
+  "description": "Advaita launcher and product surface",
+  "type": "module",
+  "bin": {
+    "advaita": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "advaita",
+    "pi",
+    "multiplayer",
+    "coding-agent"
+  ],
+  "bundledDependencies": [
+    "@advaita/broker",
+    "@advaita/pi-package",
+    "@advaita/shared",
+    "@mariozechner/jiti",
+    "@mariozechner/pi-agent-core",
+    "@mariozechner/pi-ai",
+    "@mariozechner/pi-coding-agent",
+    "@mariozechner/pi-tui",
+    "@silvia-odwyer/photon-node",
+    "chalk",
+    "cli-highlight",
+    "diff",
+    "extract-zip",
+    "file-type",
+    "glob",
+    "hosted-git-info",
+    "ignore",
+    "marked",
+    "minimatch",
+    "proper-lockfile",
+    "strip-ansi",
+    "undici",
+    "ws",
+    "yaml",
+    "zod"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli.js",
+    "test": "vitest run test",
+    "prepack": "npm run build && npm install --prefix . --omit=dev --package-lock=false",
+    "postpack": "node -e \"require('node:fs').rmSync('node_modules', { recursive: true, force: true });\""
+  },
+  "dependencies": {
+    "@advaita/broker": "file:../broker",
+    "@advaita/pi-package": "file:../pi-package",
+    "@advaita/shared": "file:../shared",
+    "@mariozechner/jiti": "^2.6.2",
+    "@mariozechner/pi-agent-core": "^0.58.1",
+    "@mariozechner/pi-ai": "^0.58.1",
+    "@mariozechner/pi-coding-agent": "file:../../../pi-mono/packages/coding-agent",
+    "@mariozechner/pi-tui": "^0.58.1",
+    "@silvia-odwyer/photon-node": "^0.3.4",
+    "chalk": "^5.5.0",
+    "cli-highlight": "^2.1.11",
+    "diff": "^8.0.2",
+    "extract-zip": "^2.0.1",
+    "file-type": "^21.1.1",
+    "glob": "^13.0.1",
+    "hosted-git-info": "^9.0.2",
+    "ignore": "^7.0.5",
+    "marked": "^15.0.12",
+    "minimatch": "^10.2.3",
+    "proper-lockfile": "^4.1.2",
+    "strip-ansi": "^7.1.0",
+    "undici": "^7.19.1",
+    "ws": "^8.18.0",
+    "yaml": "^2.8.2",
+    "zod": "^3.24.1"
+  }
 }
