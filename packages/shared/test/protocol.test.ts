@@ -112,6 +112,25 @@ describe("protocol envelopes", () => {
     expect(parsed).toEqual(message);
   });
 
+  it("serializes executor turn commits with a non-negative session revision", () => {
+    const message: ClientMessage = {
+      type: "client.turn.commit",
+      commit: {
+        turnId: "turn-1",
+        executionRuntimeId: "mac",
+        executionClientId: "client-mac",
+        executionCwd: "/Users/nickkarpov/advaita",
+        committedAt: "2026-03-14T00:00:05.000Z",
+        sessionRevision: 1,
+        entries: sessionSnapshot.entries,
+        modelState,
+      },
+    };
+
+    const parsed = parseClientMessage(serializeProtocolMessage(message).trim());
+    expect(parsed).toEqual(message);
+  });
+
   it("carries live streamed turn events as the primary mirror path", () => {
     const message: BrokerMessage = {
       type: "broker.turn.stream",
