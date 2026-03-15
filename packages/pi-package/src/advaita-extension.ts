@@ -504,7 +504,7 @@ class AdvaitaExtensionController {
           executionClientId: assignment.executionClientId,
           executionCwd: assignment.executionCwd,
           committedAt: new Date().toISOString(),
-          sessionRevision: -1,
+          sessionRevision: assignment.snapshot.metadata.revision,
           entries: appendedEntries,
           modelState: this.currentModelState(),
         },
