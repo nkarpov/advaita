@@ -8,6 +8,35 @@ Any Pi dependency used by Advaita comes from **our fork** at:
 
 Advaita does **not** treat upstream Pi as its active dependency source.
 
+## Current state vs target product state
+
+### Current development state
+
+Right now Advaita still uses a **development-first** workflow:
+
+- sibling local checkouts
+- local file/workspace dependencies on the forked Pi packages
+- direct invocation of the forked Pi CLI during manual testing
+
+That is still the correct workflow while we are developing Phases 5–7.
+
+### Target product state
+
+The intended user-facing product surface is:
+
+```bash
+npm install -g @nkarpov/advaita
+advaita
+```
+
+That means the future product must:
+
+- own the exact forked Pi runtime version it needs
+- stop depending on whatever global `pi` binary happens to be installed
+- hide the Advaita Pi package and broker as implementation details
+
+Until that launcher/install work lands, continue using the sibling-checkout workflow below.
+
 ## Remotes policy
 
 In `/Users/nickkarpov/pi-mono`:
@@ -56,7 +85,7 @@ When Advaita code needs Pi packages, it should consume the forked `@mariozechner
 
 Typical examples:
 
-- `@advaita/pi-package` will depend on forked `@mariozechner/pi-coding-agent`
+- `@advaita/pi-package` depends on forked `@mariozechner/pi-coding-agent`
 - packages using lower-level APIs may also depend on forked `@mariozechner/pi-agent-core`, `@mariozechner/pi-ai`, or `@mariozechner/pi-tui`
 
 ## Local install workflow
@@ -84,6 +113,19 @@ That makes the dependency source explicit: Advaita is using our fork, not the pu
 4. implement Advaita behavior against the forked APIs
 5. push Pi work to `origin` in `pi-mono`
 6. push Advaita work to `origin` in `advaita`
+
+## Manual testing rule today
+
+For current manual testing, do **not** trust an ambient global `pi` binary.
+
+Use the forked runtime explicitly:
+
+```bash
+cd /Users/nickkarpov/pi-mono
+node packages/coding-agent/dist/cli.js ...
+```
+
+This avoids accidentally launching an older installed Pi build that lacks the fork-only Advaita APIs.
 
 ## Important note
 

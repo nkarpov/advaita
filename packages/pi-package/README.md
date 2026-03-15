@@ -2,6 +2,21 @@
 
 Advaita Pi package/extension.
 
+## Important positioning
+
+This package is the real multiplayer Pi client layer, but it is **not** meant to be the long-term end-user entrypoint.
+
+Today it is still launched directly during development.
+
+The intended product direction is:
+
+```bash
+npm install -g @nkarpov/advaita
+advaita
+```
+
+So Phase 6 should make this package mostly an internal implementation detail behind the Advaita launcher.
+
 ## Responsibilities
 
 - connect a real Pi session to the Advaita broker
@@ -20,7 +35,7 @@ Advaita Pi package/extension.
 - `/route-debug`
 - `/runtime <runtimeId>`
 
-## Current flag-based bootstrap
+## Current development bootstrap
 
 Start the broker:
 
@@ -48,3 +63,4 @@ Do **not** use an older globally installed `pi` binary here. Advaita Phase 5 dep
 - shared image turns are not supported yet
 - `/new`, `/resume`, `/tree`, and `/fork` are blocked while connected
 - footer/status is implemented via Pi footer status text first; richer shared widgets can come later
+- the current launch flow is still development-oriented and will be hidden behind the launcher in Phase 6
