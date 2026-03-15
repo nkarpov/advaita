@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { describeTurnIntentRouterEnvironment, resolveTurnIntentRouterEnvironment } from "@advaita/broker";
 import { resolveBrokerArtifacts, resolvePiPackageArtifacts, resolvePiRuntimeArtifacts, resolveSharedArtifacts, resolveCurrentPackage, missingPiSyncApis } from "./runtime-resolution.js";
 
 export type DoctorStatus = "ok" | "warn" | "error";
@@ -80,6 +81,13 @@ export async function runDoctor(): Promise<DoctorReport> {
     name: "broker-runtime",
     status: "ok",
     detail: `Resolved ${broker.packageInfo.packageJson.name}@${broker.packageInfo.packageJson.version} with CLI ${broker.cliPath}`,
+  });
+
+  const router = resolveTurnIntentRouterEnvironment();
+  checks.push({
+    name: "turn-router",
+    status: router.mode === "heuristic" || router.apiKey ? "ok" : "warn",
+    detail: describeTurnIntentRouterEnvironment(),
   });
 
   const piPackage = resolvePiPackageArtifacts();

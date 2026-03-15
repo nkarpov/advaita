@@ -38,6 +38,22 @@ That means the launcher package pre-packs the exact runtime stack it needs, incl
 - the shared protocol package
 - the runtime dependencies required to launch them without depending on whatever happens to be installed globally
 
+## LLM router configuration
+
+The launcher inherits router configuration from the shell environment and passes it through to the managed local broker.
+
+Example:
+
+```bash
+export OPENAI_API_KEY=...
+export ADVAITA_ROUTER_MODE=auto
+export ADVAITA_ROUTER_MODEL=gpt-5.1-codex-mini
+advaita doctor
+advaita
+```
+
+If no router API key is configured, Advaita still works, but routing falls back to heuristics.
+
 ## Current validation shape
 
 Typical local validation commands are:

@@ -1,15 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { parseRequestedRuntime, resolveExecutionRuntime } from "../src/runtime-routing.js";
+import { parseRequestedRuntime, parseRequestedRuntimeDirective, resolveExecutionRuntime } from "../src/runtime-routing.js";
 
 describe("runtime routing", () => {
-  it("detects explicit run-as runtime", () => {
-    expect(parseRequestedRuntime("run this as mac and inspect Xcode", ["mac", "linux"]))
-      .toBe("mac");
+  it("detects explicit run-as runtime as a one-turn override", () => {
+    expect(parseRequestedRuntimeDirective("run this as mac and inspect Xcode", ["mac", "linux"]))
+      .toEqual({
+        requestedRuntimeId: "mac",
+        runtimeScope: "turn",
+      });
   });
 
-  it("detects explicit switch phrasing", () => {
-    expect(parseRequestedRuntime("okay ur now on linux and run tcpdump", ["mac", "linux"]))
-      .toBe("linux");
+  it("detects sticky runtime switch phrasing", () => {
+    expect(parseRequestedRuntimeDirective("okay ur now on linux and run tcpdump", ["mac", "linux"]))
+      .toEqual({
+        requestedRuntimeId: "linux",
+        runtimeScope: "session",
+      });
   });
 
   it("detects run-in runtime phrasing", () => {
@@ -17,30 +23,37 @@ describe("runtime routing", () => {
       .toBe("linux");
   });
 
-  it("detects slash commands", () => {
-    expect(parseRequestedRuntime("/runtime linux", ["mac", "linux"]))
-      .toBe("linux");
+  it("detects slash runtime commands as sticky switches", () => {
+    expect(parseRequestedRuntimeDirective("/runtime linux", ["mac", "linux"]))
+      .toEqual({
+        requestedRuntimeId: "linux",
+        runtimeScope: "session",
+      });
   });
 
-  it("falls back to origin runtime", () => {
+  it("uses the shared current runtime before origin when there is no explicit runtime", () => {
     expect(
       resolveExecutionRuntime({
-        text: "check the repo status",
-        originRuntimeId: "linux",
-        currentRuntimeId: "mac",
+        requestedRuntimeId: null,
+        runtimeScope: "none",
+        originRuntimeId: "mac",
+        currentRuntimeId: "linux",
         availableRuntimeIds: ["mac", "linux"],
       }),
     ).toEqual({
       executionRuntimeId: "linux",
       requestedRuntimeId: null,
-      source: "origin",
+      runtimeScope: "none",
+      persistedCurrentRuntimeId: "linux",
+      source: "current",
     });
   });
 
-  it("uses explicit runtime over origin runtime", () => {
+  it("keeps one-turn explicit runtime routing from changing the sticky current runtime", () => {
     expect(
       resolveExecutionRuntime({
-        text: "run as mac and inspect the app bundle",
+        requestedRuntimeId: "mac",
+        runtimeScope: "turn",
         originRuntimeId: "linux",
         currentRuntimeId: "linux",
         availableRuntimeIds: ["mac", "linux"],
@@ -48,7 +61,45 @@ describe("runtime routing", () => {
     ).toEqual({
       executionRuntimeId: "mac",
       requestedRuntimeId: "mac",
+      runtimeScope: "turn",
+      persistedCurrentRuntimeId: "linux",
       source: "explicit",
+    });
+  });
+
+  it("persists sticky runtime switches to the requested runtime", () => {
+    expect(
+      resolveExecutionRuntime({
+        requestedRuntimeId: "linux",
+        runtimeScope: "session",
+        originRuntimeId: "mac",
+        currentRuntimeId: "mac",
+        availableRuntimeIds: ["mac", "linux"],
+      }),
+    ).toEqual({
+      executionRuntimeId: "linux",
+      requestedRuntimeId: "linux",
+      runtimeScope: "session",
+      persistedCurrentRuntimeId: "linux",
+      source: "explicit",
+    });
+  });
+
+  it("bootstraps the sticky runtime from the origin runtime when the session has none yet", () => {
+    expect(
+      resolveExecutionRuntime({
+        requestedRuntimeId: null,
+        runtimeScope: "none",
+        originRuntimeId: "mac",
+        currentRuntimeId: null,
+        availableRuntimeIds: ["mac", "linux"],
+      }),
+    ).toEqual({
+      executionRuntimeId: "mac",
+      requestedRuntimeId: null,
+      runtimeScope: "none",
+      persistedCurrentRuntimeId: "mac",
+      source: "origin",
     });
   });
 });

@@ -43,7 +43,10 @@ export class AdvaitaBrokerWsServer {
             return;
           }
 
-          this.broker.handleClientMessage(connection, message);
+          void this.broker.handleClientMessage(connection, message).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            this.sendNotice(socket, "error", message);
+          });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           this.sendNotice(socket, "error", message);
