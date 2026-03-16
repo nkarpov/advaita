@@ -13,7 +13,42 @@ Advaita is built for workflows like:
 - sending a turn to a different runtime without leaving your current terminal
 - making remote execution feel immediate instead of copy-pasted or delayed
 
-Advaita is its **own coding agent CLI product**. It is built on a forked Pi runtime under the hood, but users interact with **`advaita`**, not with a manually assembled Pi + broker setup.
+## Experimental status
+
+Advaita is **experimental**.
+
+It is already usable for real multi-machine work, but if `tmux` + SSH feels simpler and better for your workflow, that is a completely reasonable conclusion.
+
+## Why not just tmux + SSH?
+
+### Is this just tmux + SSH with extra steps?
+Sometimes, yes — and for many workflows, **tmux + SSH is simpler and probably better**.
+
+Advaita is different only if you want to share an **agent session**, not just a terminal:
+
+- one shared transcript
+- visible runtime state
+- routed turns
+- live streamed remote execution
+- reconnectable shared session state
+
+If you just want one shell visible on multiple machines, use tmux.
+
+### Why not just use one agent with SSH/bash tools?
+That is the strongest alternative, and it covers a lot of the same ground.
+
+Advaita only becomes meaningfully different when other machines need to be **first-class runtimes**, not just remote tools:
+
+- each machine keeps its own auth
+- its own model availability
+- its own cwd/environment
+- its own local runtime state
+
+### So what is the real thing Advaita adds?
+
+The shortest answer is:
+
+> Advaita treats multiple machines as one shared coding-agent session.
 
 ## Install
 
