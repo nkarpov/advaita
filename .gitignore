@@ -8,4 +8,5 @@ coverage/
 *.tsbuildinfo
 .pack/
 packages/launcher/vendor/
+notes/
 *.tgz

@@ -157,11 +157,4 @@ Active work:
 - Advaita: `https://github.com/nkarpov/advaita`
 - Pi fork: `https://github.com/nkarpov/pi-mono`
 
-Local roots:
-
-- `/Users/nickkarpov/advaita`
-- `/Users/nickkarpov/pi-mono`
-
-Legacy reference only:
-
-- `/Users/nickkarpov/ws/advaita`
+For local bootstrap and the current sibling-checkout development workflow, see [`docs/development.md`](./docs/development.md).

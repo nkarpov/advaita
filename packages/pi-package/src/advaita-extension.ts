@@ -86,7 +86,7 @@ class AdvaitaExtensionController {
       return true;
     }
     ctx?.ui.notify(
-      "Advaita requires the forked Pi runtime. This `pi` binary is missing replaceSessionContents/importSessionEntries/continueSession. Run /Users/nickkarpov/pi-mono/packages/coding-agent/dist/cli.js or npm link the forked pi-mono packages/coding-agent package.",
+      "Advaita requires the forked Pi runtime. This `pi` binary is missing replaceSessionContents/importSessionEntries/continueSession. Launch through the published `advaita` CLI or run the forked pi-mono coding-agent runtime from a sibling checkout.",
       "error",
     );
     return false;

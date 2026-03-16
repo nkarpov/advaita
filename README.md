@@ -143,6 +143,7 @@ See [`TODO.md`](./TODO.md) for the current roadmap.
 ## Repository layout
 
 ```text
+docs/development.md      local bootstrap and contributor setup
 packages/shared          protocol, routing helpers, shared types
 packages/broker          broker/router/session authority
 packages/pi-package      Advaita TUI/runtime integration layer
@@ -154,9 +155,7 @@ packages/integration-tests multi-runtime validation scaffolding
 
 Active repositories:
 
-- Advaita: `/Users/nickkarpov/advaita`
-- Pi fork: `/Users/nickkarpov/pi-mono`
+- Advaita: `https://github.com/nkarpov/advaita`
+- Pi fork: `https://github.com/nkarpov/pi-mono`
 
-Reference-only legacy prototype:
-
-- `/Users/nickkarpov/ws/advaita`
+For local bootstrap, sibling-clone layout, fork workflow, and development commands, see [`docs/development.md`](./docs/development.md).

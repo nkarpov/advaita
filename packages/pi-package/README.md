@@ -38,16 +38,18 @@ The current build includes:
 
 ## Manual low-level development launch
 
-If you are working directly on this layer, you can still launch it manually with the forked runtime:
+If you are working directly on this layer, you can still launch it manually with the forked runtime from a sibling checkout layout:
 
 ```bash
-cd /Users/nickkarpov/pi-mono
+cd ../pi-mono
 node packages/coding-agent/dist/cli.js \
-  -e /Users/nickkarpov/advaita/packages/pi-package \
+  -e ../advaita/packages/pi-package \
   --advaita-url ws://127.0.0.1:7171 \
   --advaita-session demo \
-  --advaita-runtime mac
+  --advaita-runtime <runtime-id>
 ```
+
+See [`../../docs/development.md`](../../docs/development.md) for the full local bootstrap workflow.
 
 Do **not** use an older unrelated global `pi` binary here. Advaita depends on fork-only APIs such as `replaceSessionContents()`, `importSessionEntries()`, and `continueSession()`.
 
